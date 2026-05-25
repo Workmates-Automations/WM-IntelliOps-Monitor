@@ -28,6 +28,25 @@ if ! docker compose version &>/dev/null 2>&1; then
   echo "docker compose $(docker compose version)"
 fi
 
+# ── Create .env if setup.sh never completed (partial first-boot) ──────────────
+if [ ! -f "${DEPLOY_DIR}/.env" ]; then
+  echo ".env missing — generating from EC2 metadata..."
+  REGION=$(curl -s --connect-timeout 2 http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "ap-south-1")
+  ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "036160411876")
+  cat > "${DEPLOY_DIR}/.env" <<ENVEOF
+AWS_REGION=${REGION}
+HOME_ACCOUNT_ID=${ACCOUNT_ID}
+CROSS_ACCOUNT_ROLE_NAME=CWMSessionRole
+OLLAMA_MODEL=llama3.2
+MONITOR_LAMBDAS=
+MONITOR_DYNAMO_TABLES=IntelliOps-Tickets,IntelliOps-Alarms,IntelliOps-Sessions
+INTELLIOPS_STRANDS_JOBS_BUCKET=intelliops-websiterca
+DOMAIN=monitor.wmintelliops.com
+CERT_EMAIL=admin@wmintelliops.com
+ENVEOF
+  echo ".env created"
+fi
+
 # Pull latest code
 git fetch origin production
 git reset --hard origin/production
