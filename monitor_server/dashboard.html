@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IntelliOps Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .spinner { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    .chat-bubble-user { background: #4f46e5; color: #fff; border-radius: 12px 12px 4px 12px; }
+    .chat-bubble-ai   { background: #1e293b; color: #e2e8f0; border-radius: 12px 12px 12px 4px; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body class="dark bg-slate-950 text-slate-100 min-h-screen">
+
+<div class="flex h-screen overflow-hidden">
+
+  <!-- Sidebar -->
+  <aside class="w-56 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col">
+    <div class="px-5 py-5 border-b border-slate-800">
+      <div class="text-sm font-bold text-white">IntelliOps Monitor</div>
+      <div class="text-xs text-slate-500 mt-0.5">Platform Health</div>
+    </div>
+    <nav class="flex-1 py-4 space-y-1 px-3">
+      <button onclick="showTab('product')"   id="tab-product"   class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-white">📊 Product Monitoring</button>
+      <button onclick="showTab('ai')"        id="tab-ai"        class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-white">🤖 AI Monitoring</button>
+      <button onclick="showTab('cw')"        id="tab-cw"        class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-white">☁️ CW Dashboards</button>
+      <button onclick="showTab('chat')"      id="tab-chat"      class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-white">💬 AI Assistant</button>
+    </nav>
+    <div class="px-4 pb-4">
+      <div id="health-pill" class="text-xs px-3 py-2 rounded-xl bg-slate-800 text-slate-400">Checking health…</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 overflow-y-auto bg-slate-950 p-6">
+
+    <!-- Product Monitoring -->
+    <div id="view-product" class="view hidden fade-in space-y-6">
+      <div class="flex items-center justify-between">
+        <h1 class="text-xl font-bold text-white">Product Monitoring</h1>
+        <button onclick="loadProduct()" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white">↺ Refresh</button>
+      </div>
+      <div id="product-content">
+        <div class="flex items-center gap-2 text-slate-500"><svg class="spinner w-5 h-5" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31 11"/></svg>Loading…</div>
+      </div>
+    </div>
+
+    <!-- AI Monitoring -->
+    <div id="view-ai" class="view hidden fade-in space-y-6">
+      <div class="flex items-center justify-between">
+        <h1 class="text-xl font-bold text-white">AI Monitoring</h1>
+        <button onclick="loadAI()" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white">↺ Refresh</button>
+      </div>
+      <div id="ai-content">
+        <div class="flex items-center gap-2 text-slate-500"><svg class="spinner w-5 h-5" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31 11"/></svg>Loading…</div>
+      </div>
+    </div>
+
+    <!-- CW Dashboards -->
+    <div id="view-cw" class="view hidden fade-in space-y-6">
+      <div class="flex items-center justify-between gap-3">
+        <h1 class="text-xl font-bold text-white">CloudWatch Dashboards</h1>
+        <div class="flex gap-2">
+          <input id="cw-account" placeholder="Account ID (optional)" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-indigo-500 w-44" />
+          <input id="cw-region" placeholder="Region" value="ap-south-1" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-indigo-500 w-32" />
+          <button onclick="loadCW()" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Load</button>
+        </div>
+      </div>
+      <div id="cw-content">
+        <p class="text-sm text-slate-500">Enter account ID and click Load.</p>
+      </div>
+    </div>
+
+    <!-- AI Assistant -->
+    <div id="view-chat" class="view hidden fade-in flex flex-col h-[calc(100vh-5rem)]">
+      <div class="flex items-center gap-3 mb-4">
+        <h1 class="text-xl font-bold text-white">AI Assistant</h1>
+        <span id="ollama-status" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">–</span>
+      </div>
+      <div id="chat-messages" class="flex-1 overflow-y-auto space-y-3 pr-2 mb-4"></div>
+      <form id="chat-form" onsubmit="sendChat(event)" class="flex gap-2">
+        <input id="chat-input" placeholder="Ask about platform health, errors, recommendations…"
+          class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500" />
+        <button type="submit" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Send</button>
+      </form>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── tab router ────────────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'))
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    b.classList.remove('bg-slate-800', 'text-white')
+    b.classList.add('text-slate-400')
+  })
+  document.getElementById('view-' + name).classList.remove('hidden')
+  const btn = document.getElementById('tab-' + name)
+  btn.classList.add('bg-slate-800', 'text-white')
+  btn.classList.remove('text-slate-400')
+  if (name === 'product') loadProduct()
+  if (name === 'ai')      loadAI()
+}
+
+// ── health check ──────────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const r = await fetch('/health')
+    const d = await r.json()
+    const pill = document.getElementById('health-pill')
+    const ollamaOk = d.ollama === 'online'
+    pill.textContent = ollamaOk ? '🟢 Ollama Online' : '🟡 Ollama Offline'
+    pill.className = `text-xs px-3 py-2 rounded-xl ${ollamaOk ? 'bg-emerald-900/40 text-emerald-400' : 'bg-amber-900/40 text-amber-400'}`
+    document.getElementById('ollama-status').textContent = d.ollama + ' · ' + d.ollama_model
+    document.getElementById('ollama-status').className = `text-xs px-2 py-0.5 rounded-full ${ollamaOk ? 'bg-emerald-900/40 text-emerald-400' : 'bg-amber-900/40 text-amber-400'}`
+  } catch { /* ignore */ }
+}
+
+// ── product monitoring ────────────────────────────────────────────────────────
+async function loadProduct() {
+  const el = document.getElementById('product-content')
+  el.innerHTML = '<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="spinner w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31 11"/></svg>Loading product metrics…</div>'
+  try {
+    const d = await (await fetch('/api/product-monitoring')).json()
+    const h = d.service_health || {}
+    const scoreColor = h.score >= 80 ? 'text-emerald-400' : h.score >= 50 ? 'text-amber-400' : 'text-red-400'
+    let html = `
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <div class="text-xs text-slate-500 mb-1">Health Score</div>
+          <div class="text-3xl font-bold ${scoreColor}">${h.score ?? 0}</div>
+          <div class="text-xs text-slate-500">${h.status ?? ''}</div>
+        </div>
+        <div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <div class="text-xs text-slate-500 mb-1">Active Alarms</div>
+          <div class="text-3xl font-bold ${(d.active_alarms||[]).length > 0 ? 'text-red-400' : 'text-emerald-400'}">${(d.active_alarms||[]).length}</div>
+        </div>
+        <div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <div class="text-xs text-slate-500 mb-1">Lambda Functions</div>
+          <div class="text-3xl font-bold text-white">${(d.lambda_metrics||[]).length}</div>
+        </div>
+        <div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <div class="text-xs text-slate-500 mb-1">API Requests (1h)</div>
+          <div class="text-3xl font-bold text-white">${(d.api_gateway?.request_count||0).toLocaleString()}</div>
+        </div>
+      </div>`
+    // Issues
+    if ((h.issues||[]).length > 0) {
+      html += `<div class="bg-amber-900/20 border border-amber-800/50 rounded-xl p-4 mb-4 space-y-1">`
+      for (const issue of h.issues) html += `<div class="text-sm text-amber-300">⚠ ${issue}</div>`
+      html += `</div>`
+    }
+    // Lambda table
+    if ((d.lambda_metrics||[]).length > 0) {
+      html += `<div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden mb-4">
+        <div class="px-4 py-3 border-b border-slate-800 text-sm font-semibold text-white">Lambda Functions</div>
+        <div class="overflow-x-auto"><table class="w-full text-xs">
+          <thead><tr class="border-b border-slate-800 text-slate-500">
+            <th class="px-4 py-2 text-left">Function</th><th class="px-4 py-2 text-left">Invocations</th><th class="px-4 py-2 text-left">Errors</th><th class="px-4 py-2 text-left">Error Rate</th><th class="px-4 py-2 text-left">Avg Duration</th>
+          </tr></thead><tbody>`
+      for (const fn of d.lambda_metrics) {
+        const ec = fn.error_rate > 5 ? 'text-red-400' : fn.error_rate > 0 ? 'text-amber-400' : 'text-slate-400'
+        html += `<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+          <td class="px-4 py-2 text-white font-medium">${fn.name}</td>
+          <td class="px-4 py-2 text-slate-300">${fn.invocations.toLocaleString()}</td>
+          <td class="px-4 py-2 ${fn.errors > 0 ? 'text-red-400' : 'text-slate-400'}">${fn.errors}</td>
+          <td class="px-4 py-2 ${ec}">${fn.error_rate.toFixed(1)}%</td>
+          <td class="px-4 py-2 text-slate-300">${fn.avg_duration_ms}ms</td>
+        </tr>`
+      }
+      html += `</tbody></table></div></div>`
+    }
+    // Alarms
+    if ((d.active_alarms||[]).length > 0) {
+      html += `<div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 text-sm font-semibold text-white">Active Alarms</div>`
+      for (const a of d.active_alarms) {
+        html += `<div class="px-4 py-3 border-b border-slate-800/50 last:border-0">
+          <div class="text-xs font-medium text-red-300">${a.name}</div>
+          <div class="text-xs text-slate-500 mt-0.5">${a.reason?.slice(0, 120) || ''}</div>
+        </div>`
+      }
+      html += `</div>`
+    }
+    el.innerHTML = html
+  } catch (e) {
+    el.innerHTML = `<div class="text-red-400 text-sm">Error: ${e.message}</div>`
+  }
+}
+
+// ── AI monitoring ─────────────────────────────────────────────────────────────
+async function loadAI() {
+  const el = document.getElementById('ai-content')
+  el.innerHTML = '<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="spinner w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31 11"/></svg>Loading AI metrics…</div>'
+  try {
+    const d = await (await fetch('/api/ai-monitoring?days=2&limit=50')).json()
+    const s = d.summary || {}
+    const sr = s.success_rate ?? 0
+    const srColor = sr >= 80 ? 'text-emerald-400' : sr >= 60 ? 'text-amber-400' : 'text-red-400'
+    let html = `
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <div class="text-xs text-slate-500 mb-1">Success Rate</div>
+          <div class="text-3xl font-bold ${srColor}">${s.success_rate ?? 0}%</div>
+          <div class="text-xs text-slate-500">${s.total ?? 0} total responses</div>
+        </div>
+        <div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <div class="text-xs text-slate-500 mb-1">Hallucinations</div>
+          <div class="text-3xl font-bold ${(s.hallucinations||0) > 0 ? 'text-red-400' : 'text-emerald-400'}">${s.hallucinations ?? 0}</div>
+          <div class="text-xs text-slate-500">${s.hallucination_rate ?? 0}% rate</div>
+        </div>
+        <div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <div class="text-xs text-slate-500 mb-1">Avg Latency</div>
+          <div class="text-3xl font-bold text-white">${s.avg_latency_ms ?? 0}ms</div>
+        </div>
+        <div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <div class="text-xs text-slate-500 mb-1">Error Rate</div>
+          <div class="text-3xl font-bold ${(s.error_rate||0) > 20 ? 'text-red-400' : 'text-slate-300'}">${s.error_rate ?? 0}%</div>
+        </div>
+      </div>`
+    // Alerts
+    for (const alert of (d.alerts || [])) {
+      const cls = alert.level === 'critical' ? 'bg-red-900/20 border-red-800/50 text-red-300' : 'bg-amber-900/20 border-amber-800/50 text-amber-300'
+      html += `<div class="border rounded-xl px-4 py-3 mb-3 ${cls}">
+        <div class="text-sm font-medium">${alert.title}</div>
+        <div class="text-xs mt-0.5 opacity-80">${alert.detail}</div>
+      </div>`
+    }
+    // Per-agent
+    if (Object.keys(s.by_agent || {}).length > 0) {
+      html += `<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-3">`
+      for (const [agent, stat] of Object.entries(s.by_agent)) {
+        const asr = stat.success_rate ?? 0
+        const ac = asr >= 80 ? 'text-emerald-400' : asr >= 60 ? 'text-amber-400' : 'text-red-400'
+        html += `<div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <div class="text-sm font-semibold text-white capitalize mb-3">${agent} Agent</div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-slate-800/50 rounded-lg p-2"><div class="text-slate-400">Success</div><div class="${ac} font-medium">${asr}%</div></div>
+            <div class="bg-slate-800/50 rounded-lg p-2"><div class="text-slate-400">Total</div><div class="text-white font-medium">${stat.total}</div></div>
+            <div class="bg-slate-800/50 rounded-lg p-2"><div class="text-slate-400">Hallucinations</div><div class="${(stat.hallucinations||0) > 0 ? 'text-red-400' : 'text-white'} font-medium">${stat.hallucinations||0}</div></div>
+            <div class="bg-slate-800/50 rounded-lg p-2"><div class="text-slate-400">Avg Latency</div><div class="text-white font-medium">${stat.avg_latency_ms}ms</div></div>
+          </div>
+        </div>`
+      }
+      html += `</div>`
+    }
+    if ((d.events || []).length === 0 && !d.alerts?.length) {
+      html += `<div class="text-center py-12 text-slate-500 text-sm">No AI monitoring events found in the last 48 hours.</div>`
+    }
+    el.innerHTML = html
+  } catch (e) {
+    el.innerHTML = `<div class="text-red-400 text-sm">Error: ${e.message}</div>`
+  }
+}
+
+// ── cloudwatch dashboards ─────────────────────────────────────────────────────
+async function loadCW() {
+  const el  = document.getElementById('cw-content')
+  const acc = document.getElementById('cw-account').value.trim()
+  const reg = document.getElementById('cw-region').value.trim() || 'ap-south-1'
+  el.innerHTML = '<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="spinner w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31 11"/></svg>Loading dashboards…</div>'
+  try {
+    const qs = new URLSearchParams({ region: reg })
+    if (acc) qs.set('account_id', acc)
+    const d = await (await fetch(`/api/cloudwatch-dashboards?${qs}`)).json()
+    if ((d.dashboards || []).length === 0) {
+      el.innerHTML = '<div class="text-slate-500 text-sm">No CloudWatch dashboards found.</div>'
+      return
+    }
+    let html = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">`
+    for (const dash of d.dashboards) {
+      html += `<div class="bg-slate-900 rounded-xl border border-slate-800 p-4 flex items-start gap-3">
+        <span class="text-cyan-400 mt-0.5">☁</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-white truncate">${dash.name}</div>
+          <div class="text-xs text-slate-500 mt-0.5">${new Date(dash.last_modified).toLocaleDateString()} · ${(dash.size_bytes/1024).toFixed(1)} KB</div>
+        </div>
+        <a href="${dash.console_url}" target="_blank" class="text-slate-500 hover:text-cyan-400 transition-colors text-xs">↗</a>
+      </div>`
+    }
+    html += `</div>`
+    el.innerHTML = html
+  } catch (e) {
+    el.innerHTML = `<div class="text-red-400 text-sm">Error: ${e.message}</div>`
+  }
+}
+
+// ── ollama chat ────────────────────────────────────────────────────────────────
+async function sendChat(e) {
+  e.preventDefault()
+  const input = document.getElementById('chat-input')
+  const msg   = input.value.trim()
+  if (!msg) return
+  input.value = ''
+  const msgs = document.getElementById('chat-messages')
+  msgs.innerHTML += `<div class="flex justify-end"><div class="chat-bubble-user px-4 py-2.5 text-sm max-w-xl">${escHtml(msg)}</div></div>`
+  msgs.innerHTML += `<div id="typing" class="flex items-center gap-2 text-slate-400 text-sm"><svg class="spinner w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31 11"/></svg>Thinking…</div>`
+  msgs.scrollTop = msgs.scrollHeight
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: msg }),
+    })
+    const d = await r.json()
+    document.getElementById('typing').remove()
+    msgs.innerHTML += `<div class="flex"><div class="chat-bubble-ai px-4 py-2.5 text-sm max-w-xl"><pre class="font-sans leading-relaxed">${escHtml(d.response)}</pre></div></div>`
+  } catch (err) {
+    document.getElementById('typing').remove()
+    msgs.innerHTML += `<div class="text-red-400 text-sm">Error: ${err.message}</div>`
+  }
+  msgs.scrollTop = msgs.scrollHeight
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+// ── init ───────────────────────────────────────────────────────────────────────
+showTab('product')
+checkHealth()
+setInterval(checkHealth, 30000)
+</script>
+</body>
+</html>

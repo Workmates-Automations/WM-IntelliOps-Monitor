@@ -1,0 +1,62 @@
+version: '3.9'
+
+services:
+
+  # ── Ollama — local LLM ────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: intelliops-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+    restart: unless-stopped
+    # GPU support (uncomment if your EC2 has a GPU, e.g. g4dn/g5/p3):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # ── Monitor API ───────────────────────────────────────────────────────────────
+  monitor:
+    build: ./monitor_server
+    container_name: intelliops-monitor
+    ports:
+      - "8000:8000"
+    environment:
+      # AWS cross-account
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - HOME_ACCOUNT_ID=${HOME_ACCOUNT_ID:-036160411876}
+      - CROSS_ACCOUNT_ROLE_NAME=${CROSS_ACCOUNT_ROLE_NAME:-CWMSessionRole}
+      # Ollama
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      # Monitoring targets
+      - MONITOR_LAMBDAS=${MONITOR_LAMBDAS:-}
+      - MONITOR_DYNAMO_TABLES=${MONITOR_DYNAMO_TABLES:-IntelliOps-Tickets,IntelliOps-Alarms,IntelliOps-Sessions}
+      - INTELLIOPS_STRANDS_JOBS_BUCKET=${INTELLIOPS_STRANDS_JOBS_BUCKET:-intelliops-websiterca}
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  # ── Nginx reverse proxy ───────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: intelliops-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro      # drop SSL certs here if you have them
+    depends_on:
+      - monitor
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
