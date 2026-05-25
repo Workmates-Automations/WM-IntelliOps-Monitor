@@ -11,14 +11,6 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=24h
     restart: unless-stopped
-    # GPU support (uncomment if your EC2 has a GPU, e.g. g4dn/g5/p3):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
 
   # ── Monitor API ───────────────────────────────────────────────────────────────
   monitor:
@@ -50,14 +42,9 @@ services:
     volumes:
       - certbot_certs:/etc/letsencrypt
       - certbot_www:/var/www/certbot
-    entrypoint: >
-      /bin/sh -c '
-        trap exit TERM;
-        while :; do
-          certbot renew --quiet --webroot -w /var/www/certbot 2>/dev/null;
-          sleep 12h & wait $${!};
-        done
-      '
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet --webroot -w /var/www/certbot 2>/dev/null; sleep 12h & wait $${!}; done'
+    depends_on:
+      - nginx
     restart: unless-stopped
 
   # ── Nginx reverse proxy ───────────────────────────────────────────────────────

@@ -138,29 +138,34 @@ EOF
 # ── Start stack ───────────────────────────────────────────────────────────────
 echo "[7/7] Starting docker-compose stack…"
 chmod +x "$DEPLOY_DIR/nginx/init-cert.sh"
+chmod +x "$DEPLOY_DIR/ec2/deploy.sh"
+chmod +x "$DEPLOY_DIR/ec2/userdata.sh"
 docker compose -f "$DEPLOY_DIR/docker-compose.yml" --env-file "$DEPLOY_DIR/.env" up -d --build
 
 # ── Issue Let's Encrypt certificate ──────────────────────────────────────────
 echo "Waiting for nginx to be ready on port 80…"
-for i in $(seq 1 30); do
-  if curl -sf http://localhost/health &>/dev/null || curl -s http://localhost -o /dev/null -w "%{http_code}" | grep -qE "301|200"; then
+for i in $(seq 1 24); do
+  if curl -sfo /dev/null http://localhost; then
     echo "Nginx ready (${i}s)"
     break
   fi
   sleep 5
 done
 
+COMPOSE="docker compose -f $DEPLOY_DIR/docker-compose.yml --env-file $DEPLOY_DIR/.env"
+
 echo "Issuing Let's Encrypt certificate for monitor.wmintelliops.com…"
-docker compose -f "$DEPLOY_DIR/docker-compose.yml" \
-  run --rm --entrypoint "certbot" certbot \
+$COMPOSE stop certbot 2>/dev/null || true
+$COMPOSE run --rm --entrypoint certbot certbot \
   certonly --webroot -w /var/www/certbot \
   -d monitor.wmintelliops.com \
   --email admin@wmintelliops.com \
   --agree-tos --no-eff-email \
-  --non-interactive \
-  && docker compose -f "$DEPLOY_DIR/docker-compose.yml" exec nginx nginx -s reload \
+  --non-interactive 2>&1 \
+  && $COMPOSE exec -T nginx nginx -s reload \
   && echo "Certificate issued and nginx reloaded" \
   || echo "WARNING: cert issuance failed — nginx serving self-signed cert until retry"
+$COMPOSE start certbot 2>/dev/null || true
 
 # ── Create systemd service for auto-restart on reboot ─────────────────────────
 cat > /etc/systemd/system/intelliops-monitor.service <<EOF

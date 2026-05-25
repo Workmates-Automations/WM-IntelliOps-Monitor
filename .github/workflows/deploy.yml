@@ -151,28 +151,22 @@ jobs:
         run: |
           INSTANCE_ID="${{ steps.ec2.outputs.instance_id }}"
 
-          COMMANDS='[
-            "cd /opt/intelliops-monitor",
-            "git fetch origin production",
-            "git reset --hard origin/production",
-            "docker compose up -d --build monitor",
-            "docker compose restart nginx",
-            "echo === Deploy complete ==="
-          ]'
+          # Single command: pull latest (including deploy.sh), then run it
+          COMMANDS='["cd /opt/intelliops-monitor && git fetch origin production && git reset --hard origin/production && chmod +x ec2/deploy.sh && bash ec2/deploy.sh"]'
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --timeout-seconds 300 \
+            --timeout-seconds 600 \
             --parameters "commands=${COMMANDS}" \
             --query 'Command.CommandId' \
             --output text)
 
           echo "SSM command: $COMMAND_ID"
 
-          # Poll until done (max 5 min)
+          # Poll until done (max 10 min)
           STATUS="InProgress"
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             sleep 10
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$COMMAND_ID" \
