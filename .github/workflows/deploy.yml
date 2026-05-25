@@ -1,0 +1,225 @@
+name: Deploy IntelliOps Monitor
+
+# Runs on every push to production.
+# First run  → creates IAM role, security group, and EC2 instance; stores
+#              the instance ID in SSM Parameter Store for future runs.
+# Next runs  → finds the existing EC2 via SSM and updates it in-place using
+#              SSM Run Command (git pull + docker compose rebuild).
+#
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID     — IAM user key (see permissions note below)
+#   AWS_SECRET_ACCESS_KEY
+#
+# Deployer IAM user needs:
+#   ec2:Describe*, ec2:RunInstances, ec2:CreateSecurityGroup,
+#   ec2:AuthorizeSecurityGroupIngress, ec2:CreateTags
+#   iam:CreateRole, iam:PutRolePolicy, iam:AttachRolePolicy,
+#   iam:CreateInstanceProfile, iam:AddRoleToInstanceProfile, iam:GetInstanceProfile
+#   ssm:GetParameter, ssm:PutParameter, ssm:SendCommand, ssm:GetCommandInvocation
+
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1
+  SSM_PARAM: /intelliops-monitor/ec2-instance-id
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── Detect existing instance ─────────────────────────────────────────────
+      - name: Check for existing EC2 instance
+        id: ec2
+        run: |
+          INSTANCE_ID=$(aws ssm get-parameter \
+            --name "${{ env.SSM_PARAM }}" \
+            --query "Parameter.Value" \
+            --output text 2>/dev/null || true)
+
+          STATE="none"
+          if [[ -n "$INSTANCE_ID" && "$INSTANCE_ID" != "None" ]]; then
+            STATE=$(aws ec2 describe-instances \
+              --instance-ids "$INSTANCE_ID" \
+              --query "Reservations[0].Instances[0].State.Name" \
+              --output text 2>/dev/null || echo "none")
+          fi
+
+          echo "instance_id=${INSTANCE_ID}" >> "$GITHUB_OUTPUT"
+          echo "state=${STATE}"             >> "$GITHUB_OUTPUT"
+          echo "Existing instance: ${INSTANCE_ID:-none}  state=${STATE}"
+
+      # ── FIRST RUN: provision EC2 ─────────────────────────────────────────────
+      - name: Setup IAM role + instance profile
+        if: steps.ec2.outputs.state != 'running'
+        working-directory: iam
+        run: bash create-role.sh
+
+      - name: Launch EC2 instance
+        if: steps.ec2.outputs.state != 'running'
+        id: launch
+        run: |
+          # Latest Amazon Linux 2023 x86_64 AMI
+          AMI_ID=$(aws ec2 describe-images \
+            --owners amazon \
+            --filters "Name=name,Values=al2023-ami-*-x86_64" "Name=state,Values=available" \
+            --query "sort_by(Images, &CreationDate)[-1].ImageId" \
+            --output text)
+          echo "AMI: $AMI_ID"
+
+          # Default VPC
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters Name=isDefault,Values=true \
+            --query 'Vpcs[0].VpcId' --output text)
+
+          # Security group (idempotent)
+          SG_ID=$(aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=intelliops-monitor-sg" "Name=vpc-id,Values=${VPC_ID}" \
+            --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || true)
+
+          if [[ -z "$SG_ID" || "$SG_ID" == "None" ]]; then
+            SG_ID=$(aws ec2 create-security-group \
+              --group-name intelliops-monitor-sg \
+              --description "IntelliOps Monitor" \
+              --vpc-id "$VPC_ID" \
+              --query 'GroupId' --output text)
+            aws ec2 authorize-security-group-ingress \
+              --group-id "$SG_ID" --protocol tcp --port 80  --cidr 0.0.0.0/0
+            aws ec2 authorize-security-group-ingress \
+              --group-id "$SG_ID" --protocol tcp --port 443 --cidr 0.0.0.0/0
+            aws ec2 authorize-security-group-ingress \
+              --group-id "$SG_ID" --protocol tcp --port 22  --cidr 0.0.0.0/0
+            echo "Created security group: $SG_ID"
+          else
+            echo "Reusing security group: $SG_ID"
+          fi
+
+          # User data: install git → clone repo → run setup
+          USER_DATA=$(base64 -w0 << 'USERDATA'
+#!/bin/bash
+set -euo pipefail
+exec > >(tee /var/log/intelliops-userdata.log) 2>&1
+echo "=== IntelliOps Monitor bootstrap $(date) ==="
+command -v git &>/dev/null || dnf install -y git || apt-get install -y git
+git clone -b production \
+  https://github.com/Workmates-Automations/WM-IntelliOps-Monitor.git \
+  /opt/intelliops-monitor
+cd /opt/intelliops-monitor
+bash setup.sh
+USERDATA
+          )
+
+          INSTANCE_ID=$(aws ec2 run-instances \
+            --image-id "$AMI_ID" \
+            --instance-type t3.large \
+            --iam-instance-profile Name=IntelliOps-Monitor-Profile \
+            --security-group-ids "$SG_ID" \
+            --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
+            --user-data "$USER_DATA" \
+            --metadata-options "HttpTokens=required,HttpEndpoint=enabled" \
+            --tag-specifications \
+              "ResourceType=instance,Tags=[{Key=Name,Value=IntelliOps-Monitor},{Key=Project,Value=IntelliOps}]" \
+              "ResourceType=volume,Tags=[{Key=Name,Value=IntelliOps-Monitor}]" \
+            --query 'Instances[0].InstanceId' \
+            --output text)
+
+          # Store instance ID in SSM for future deployments
+          aws ssm put-parameter \
+            --name "${{ env.SSM_PARAM }}" \
+            --value "$INSTANCE_ID" \
+            --type String \
+            --overwrite
+
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "Launched $INSTANCE_ID — waiting for running state…"
+          aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "public_ip=$PUBLIC_IP" >> "$GITHUB_OUTPUT"
+          echo "Instance running at $PUBLIC_IP"
+          echo "NOTE: full setup takes ~5-10 min (Ollama pulls llama3.2)"
+
+      # ── SUBSEQUENT PUSHES: update in-place ──────────────────────────────────
+      - name: Update existing EC2 via SSM Run Command
+        if: steps.ec2.outputs.state == 'running'
+        run: |
+          INSTANCE_ID="${{ steps.ec2.outputs.instance_id }}"
+
+          COMMANDS='[
+            "cd /opt/intelliops-monitor",
+            "git fetch origin production",
+            "git reset --hard origin/production",
+            "docker compose up -d --build monitor",
+            "docker compose restart nginx",
+            "echo === Deploy complete ==="
+          ]'
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 300 \
+            --parameters "commands=${COMMANDS}" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "SSM command: $COMMAND_ID"
+
+          # Poll until done (max 5 min)
+          STATUS="InProgress"
+          for i in $(seq 1 30); do
+            sleep 10
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query 'Status' --output text 2>/dev/null || echo "Pending")
+            echo "  [${i}0s] $STATUS"
+            [[ "$STATUS" == "Success" || "$STATUS" == "Failed" || \
+               "$STATUS" == "TimedOut" || "$STATUS" == "Cancelled" ]] && break
+          done
+
+          # Print output regardless of result
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query '[StandardOutputContent, StandardErrorContent]' \
+            --output text
+
+          [[ "$STATUS" == "Success" ]] || { echo "Deploy failed with status: $STATUS"; exit 1; }
+
+      # ── Always: print dashboard URL ──────────────────────────────────────────
+      - name: Print dashboard URL
+        if: always()
+        run: |
+          INSTANCE_ID="${{ steps.launch.outputs.instance_id }}"
+          [[ -z "$INSTANCE_ID" ]] && INSTANCE_ID="${{ steps.ec2.outputs.instance_id }}"
+          [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]] && exit 0
+
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text 2>/dev/null || echo "pending")
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  IntelliOps Monitor"
+          echo "  Dashboard : http://${PUBLIC_IP}"
+          echo "  API docs  : http://${PUBLIC_IP}/docs"
+          echo "  Health    : http://${PUBLIC_IP}/health"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

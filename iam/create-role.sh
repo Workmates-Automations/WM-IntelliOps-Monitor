@@ -25,6 +25,11 @@ echo "Creating instance profile…"
 aws iam create-instance-profile \
   --instance-profile-name "$PROFILE_NAME" 2>/dev/null || echo "Profile already exists"
 
+echo "Attaching SSM managed policy (required for SSM Run Command deployments)…"
+aws iam attach-role-policy \
+  --role-name "$ROLE_NAME" \
+  --policy-arn "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore" 2>/dev/null || echo "SSM policy already attached"
+
 echo "Adding role to instance profile…"
 aws iam add-role-to-instance-profile \
   --instance-profile-name "$PROFILE_NAME" \
