@@ -52,9 +52,13 @@ git fetch origin production
 git reset --hard origin/production
 chmod +x nginx/init-cert.sh
 
-# Recreate monitor, nginx, certbot with latest config
-# --force-recreate picks up new volume mounts (certbot_certs, init-cert.sh)
-$COMPOSE up -d --build --force-recreate monitor nginx certbot
+# Ensure ollama is running (start only — never recreate, image is 3.8 GB)
+$COMPOSE up -d --no-recreate ollama 2>/dev/null || true
+
+# Recreate monitor, nginx, certbot with latest config.
+# --no-deps: skip ollama so we never re-pull its 3.8 GB image.
+# --force-recreate: picks up new volume mounts (certbot_certs, init-cert.sh).
+$COMPOSE up -d --build --force-recreate --no-deps monitor nginx certbot
 
 # Wait for nginx to accept connections (max 60s)
 echo "Waiting for nginx..."
