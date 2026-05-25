@@ -16,6 +16,7 @@ name: Deploy IntelliOps Monitor
 #   iam:CreateRole, iam:PutRolePolicy, iam:AttachRolePolicy,
 #   iam:CreateInstanceProfile, iam:AddRoleToInstanceProfile, iam:GetInstanceProfile
 #   ssm:GetParameter, ssm:PutParameter, ssm:SendCommand, ssm:GetCommandInvocation
+#   route53:ListHostedZonesByName, route53:ChangeResourceRecordSets
 
 on:
   push:
@@ -191,8 +192,9 @@ jobs:
 
           [[ "$STATUS" == "Success" ]] || { echo "Deploy failed with status: $STATUS"; exit 1; }
 
-      # ── Always: print dashboard URL ──────────────────────────────────────────
-      - name: Print dashboard URL
+      # ── Resolve public IP (used by Route53 + summary) ───────────────────────
+      - name: Resolve public IP
+        id: ip
         if: always()
         run: |
           INSTANCE_ID="${{ steps.launch.outputs.instance_id }}"
@@ -202,12 +204,36 @@ jobs:
           PUBLIC_IP=$(aws ec2 describe-instances \
             --instance-ids "$INSTANCE_ID" \
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
-            --output text 2>/dev/null || echo "pending")
+            --output text 2>/dev/null || true)
+          echo "public_ip=${PUBLIC_IP}" >> "$GITHUB_OUTPUT"
+          echo "Public IP: $PUBLIC_IP"
 
+      # ── Upsert Route53 A record ──────────────────────────────────────────────
+      - name: Upsert Route53 DNS record
+        if: steps.ip.outputs.public_ip != ''
+        run: |
+          PUBLIC_IP="${{ steps.ip.outputs.public_ip }}"
+
+          ZONE_ID=$(aws route53 list-hosted-zones-by-name \
+            --dns-name wmintelliops.com. \
+            --query 'HostedZones[0].Id' \
+            --output text | sed 's|/hostedzone/||')
+
+          aws route53 change-resource-record-sets \
+            --hosted-zone-id "$ZONE_ID" \
+            --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"monitor.wmintelliops.com\",\"Type\":\"A\",\"TTL\":60,\"ResourceRecords\":[{\"Value\":\"${PUBLIC_IP}\"}]}}]}"
+
+          echo "Route53: monitor.wmintelliops.com → ${PUBLIC_IP}"
+
+      # ── Always: print dashboard URL ──────────────────────────────────────────
+      - name: Print dashboard URL
+        if: always()
+        run: |
           echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "  IntelliOps Monitor"
-          echo "  Dashboard : http://${PUBLIC_IP}"
-          echo "  API docs  : http://${PUBLIC_IP}/docs"
-          echo "  Health    : http://${PUBLIC_IP}/health"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Dashboard : https://monitor.wmintelliops.com"
+          echo "  API docs  : https://monitor.wmintelliops.com/docs"
+          echo "  Health    : https://monitor.wmintelliops.com/health"
+          echo "  NOTE: HTTPS cert is issued ~5 min after first EC2 boot"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

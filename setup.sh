@@ -129,11 +129,38 @@ MONITOR_DYNAMO_TABLES=IntelliOps-Tickets,IntelliOps-Alarms,IntelliOps-Sessions
 
 # S3 bucket with AI monitoring events
 INTELLIOPS_STRANDS_JOBS_BUCKET=intelliops-websiterca
+
+# Domain
+DOMAIN=monitor.wmintelliops.com
+CERT_EMAIL=admin@wmintelliops.com
 EOF
 
 # ── Start stack ───────────────────────────────────────────────────────────────
 echo "[7/7] Starting docker-compose stack…"
+chmod +x "$DEPLOY_DIR/nginx/init-cert.sh"
 docker compose -f "$DEPLOY_DIR/docker-compose.yml" --env-file "$DEPLOY_DIR/.env" up -d --build
+
+# ── Issue Let's Encrypt certificate ──────────────────────────────────────────
+echo "Waiting for nginx to be ready on port 80…"
+for i in $(seq 1 30); do
+  if curl -sf http://localhost/health &>/dev/null || curl -s http://localhost -o /dev/null -w "%{http_code}" | grep -qE "301|200"; then
+    echo "Nginx ready (${i}s)"
+    break
+  fi
+  sleep 5
+done
+
+echo "Issuing Let's Encrypt certificate for monitor.wmintelliops.com…"
+docker compose -f "$DEPLOY_DIR/docker-compose.yml" \
+  run --rm --entrypoint "certbot" certbot \
+  certonly --webroot -w /var/www/certbot \
+  -d monitor.wmintelliops.com \
+  --email admin@wmintelliops.com \
+  --agree-tos --no-eff-email \
+  --non-interactive \
+  && docker compose -f "$DEPLOY_DIR/docker-compose.yml" exec nginx nginx -s reload \
+  && echo "Certificate issued and nginx reloaded" \
+  || echo "WARNING: cert issuance failed — nginx serving self-signed cert until retry"
 
 # ── Create systemd service for auto-restart on reboot ─────────────────────────
 cat > /etc/systemd/system/intelliops-monitor.service <<EOF
