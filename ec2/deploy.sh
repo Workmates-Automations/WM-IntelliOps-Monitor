@@ -70,6 +70,17 @@ for i in $(seq 1 12); do
   sleep 5
 done
 
+# If certbot has never successfully issued a cert, the live/ directory contains
+# dummy files created by init-cert.sh (real files, not certbot's symlinks).
+# Certbot cannot overwrite real files with its symlink structure, so it fails.
+# Delete dummy files only when no renewal config exists (i.e. certbot never ran).
+$COMPOSE run --rm --entrypoint /bin/sh certbot -c \
+  'DOMAIN=monitor.wmintelliops.com
+   if [ ! -f "/etc/letsencrypt/renewal/${DOMAIN}.conf" ]; then
+     echo "No renewal config found — removing dummy cert so certbot can create real one"
+     rm -rf "/etc/letsencrypt/live/${DOMAIN}" "/etc/letsencrypt/archive/${DOMAIN}"
+   fi'
+
 # Stop renewal daemon to avoid lock-file conflict, run one-off cert issuance
 $COMPOSE stop certbot 2>/dev/null || true
 
