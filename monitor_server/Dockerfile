@@ -2,12 +2,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
+# Install dependencies (context is repo root — see docker-compose.yml)
+COPY monitor_server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy server files
-COPY . .
+# Copy monitor server files
+COPY monitor_server/ .
+
+# Copy the wmintelliops multi-agent package so agents are importable
+COPY wmintelliops/ ./wmintelliops/
 
 EXPOSE 8000
 

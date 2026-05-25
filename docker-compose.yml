@@ -14,7 +14,9 @@ services:
 
   # ── Monitor API ───────────────────────────────────────────────────────────────
   monitor:
-    build: ./monitor_server
+    build:
+      context: .
+      dockerfile: monitor_server/Dockerfile
     container_name: intelliops-monitor
     environment:
       - AWS_REGION=${AWS_REGION:-ap-south-1}
@@ -33,6 +35,30 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
+      start_period: 30s
+
+  # ── Multi-Agent API (wmintelliops PoC on port 8001) ──────────────────────────
+  multiagent:
+    build:
+      context: .
+      dockerfile: wmintelliops/Dockerfile
+    container_name: intelliops-multiagent
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - MONITOR_URL=http://monitor:8000
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - HOME_ACCOUNT_ID=${HOME_ACCOUNT_ID:-036160411876}
+      - HEALING_DRY_RUN=true
+    depends_on:
+      - ollama
+      - monitor
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
       start_period: 30s
 
   # ── Certbot — Let's Encrypt renewal daemon ────────────────────────────────────

@@ -465,7 +465,7 @@ def _ai_alerts(summary: Dict) -> List[Dict]:
 def _check_service_endpoints() -> List[Dict]:
     """HTTP health checks against key IntelliOps services."""
     services = [
-        {"name": "IntelliOps Portal", "url": "https://portal.wmintelliops.com/api/health"},
+        {"name": "IntelliOps Portal", "url": "https://portal.wmintelliops.com"},
         {"name": "Monitor Server",    "url": "http://localhost:8000/health"},
         {"name": "Ollama",            "url": f"{_OLLAMA_URL}/api/tags"},
     ]

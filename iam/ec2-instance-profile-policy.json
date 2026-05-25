@@ -44,12 +44,30 @@
       "Effect": "Allow",
       "Action": [
         "s3:GetObject",
+        "s3:PutObject",
         "s3:ListBucket"
       ],
       "Resource": [
         "arn:aws:s3:::intelliops-websiterca",
         "arn:aws:s3:::intelliops-websiterca/ai-monitoring/*"
       ]
+    },
+    {
+      "Sid": "EC2Monitoring",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RDSMonitoring",
+      "Effect": "Allow",
+      "Action": [
+        "rds:DescribeDBInstances"
+      ],
+      "Resource": "*"
     }
   ]
 }

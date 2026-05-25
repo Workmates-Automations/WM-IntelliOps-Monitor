@@ -55,10 +55,18 @@ chmod +x nginx/init-cert.sh
 # Ensure ollama is running (start only — never recreate, image is 3.8 GB)
 $COMPOSE up -d --no-recreate ollama 2>/dev/null || true
 
-# Recreate monitor, nginx, certbot with latest config.
+# Apply IAM inline policy update so EC2/RDS monitoring permissions stay current
+echo "Refreshing IAM inline policy…"
+aws iam put-role-policy \
+  --role-name "IntelliOps-Monitor-EC2-Role" \
+  --policy-name "IntelliOps-Monitor-Policy" \
+  --policy-document file://"${DEPLOY_DIR}/iam/ec2-instance-profile-policy.json" 2>/dev/null \
+  && echo "IAM policy updated" || echo "NOTE: IAM policy update skipped (may require elevated permissions)"
+
+# Recreate monitor, multiagent, nginx, certbot with latest config.
 # --no-deps: skip ollama so we never re-pull its 3.8 GB image.
 # --force-recreate: picks up new volume mounts (certbot_certs, init-cert.sh).
-$COMPOSE up -d --build --force-recreate --no-deps monitor nginx certbot
+$COMPOSE up -d --build --force-recreate --no-deps monitor multiagent nginx certbot
 
 # Wait for nginx to accept connections (max 60s)
 echo "Waiting for nginx..."
