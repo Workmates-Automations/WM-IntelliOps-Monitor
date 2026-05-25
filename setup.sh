@@ -57,12 +57,15 @@ usermod -aG docker ec2-user 2>/dev/null || usermod -aG docker ubuntu 2>/dev/null
 # ── Install Docker Compose v2 ──────────────────────────────────────────────────
 echo "[3/7] Installing Docker Compose…"
 if ! docker compose version &>/dev/null 2>&1; then
-  COMPOSE_VER=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d'"' -f4)
-  COMPOSE_VER="${COMPOSE_VER:-v2.27.0}"
-  mkdir -p /usr/local/lib/docker/cli-plugins
-  curl -SL "https://github.com/docker/compose/releases/download/${COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)" \
-    -o /usr/local/lib/docker/cli-plugins/docker-compose
-  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  # Try package manager first (Amazon Linux 2023 / Ubuntu)
+  dnf install -y docker-compose-plugin 2>/dev/null || apt-get install -y docker-compose-plugin 2>/dev/null || true
+  # Fallback: direct binary (lowercase linux, not uname -s which returns Linux)
+  if ! docker compose version &>/dev/null 2>&1; then
+    mkdir -p /usr/local/lib/docker/cli-plugins
+    curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-$(uname -m)" \
+      -o /usr/local/lib/docker/cli-plugins/docker-compose
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  fi
 fi
 echo "Docker Compose: $(docker compose version)"
 

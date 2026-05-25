@@ -12,6 +12,22 @@ cd "$DEPLOY_DIR"
 
 echo "=== Deploy started $(date) ==="
 
+# ── Ensure docker compose v2 plugin is installed ──────────────────────────────
+if ! docker compose version &>/dev/null 2>&1; then
+  echo "docker compose plugin not found — installing..."
+  if command -v dnf &>/dev/null; then
+    dnf install -y docker-compose-plugin 2>/dev/null || true
+  fi
+  # Fallback: manual binary download
+  if ! docker compose version &>/dev/null 2>&1; then
+    mkdir -p /usr/local/lib/docker/cli-plugins
+    curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64" \
+      -o /usr/local/lib/docker/cli-plugins/docker-compose
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  fi
+  echo "docker compose $(docker compose version)"
+fi
+
 # Pull latest code
 git fetch origin production
 git reset --hard origin/production
