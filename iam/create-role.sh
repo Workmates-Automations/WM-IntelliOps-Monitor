@@ -17,7 +17,7 @@ else
   aws iam create-role \
     --role-name "$ROLE_NAME" \
     --assume-role-policy-document file://trust-policy.json \
-    --description "EC2 role for IntelliOps Monitor — cross-account CloudWatch read access"
+    --description "EC2 role for IntelliOps Monitor - cross-account CloudWatch read access"
 fi
 
 # ── Inline policy (always overwrite so updates are applied) ───────────────────
