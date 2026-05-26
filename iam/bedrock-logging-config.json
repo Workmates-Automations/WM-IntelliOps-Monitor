@@ -1,0 +1,10 @@
+{
+  "cloudWatchConfig": {
+    "logGroupName": "/aws/bedrock/model-invocations",
+    "roleArn": "arn:aws:iam::036160411876:role/AmazonBedrockModelInvocationLoggingRole",
+    "largeDataDeliveryS3Config": {
+      "bucketName": "intelliops-websiterca",
+      "keyPrefix": "bedrock-logs/"
+    }
+  }
+}

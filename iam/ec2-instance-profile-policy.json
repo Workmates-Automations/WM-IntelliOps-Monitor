@@ -82,10 +82,12 @@
       "Effect": "Allow",
       "Action": [
         "bedrock:GetModelInvocationLoggingConfiguration",
+        "bedrock:PutModelInvocationLoggingConfiguration",
         "bedrock:ListFoundationModels",
-        "bedrock-agent:ListAgents",
-        "bedrock-agent:GetAgent",
-        "bedrock-agent:ListAgentAliases"
+        "bedrock:ListAgents",
+        "bedrock:GetAgent",
+        "bedrock:ListAgentAliases",
+        "bedrock:ListAgentVersions"
       ],
       "Resource": "*"
     },
