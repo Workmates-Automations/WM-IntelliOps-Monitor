@@ -18,10 +18,11 @@ if ! docker compose version &>/dev/null 2>&1; then
   if command -v dnf &>/dev/null; then
     dnf install -y docker-compose-plugin 2>/dev/null || true
   fi
-  # Fallback: manual binary download
+  # Fallback: manual binary download (arch-aware for x86_64 and aarch64/arm64)
   if ! docker compose version &>/dev/null 2>&1; then
     mkdir -p /usr/local/lib/docker/cli-plugins
-    curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64" \
+    _ARCH=$(uname -m); [[ "$_ARCH" == "aarch64" ]] && _ARCH="aarch64" || _ARCH="x86_64"
+    curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-${_ARCH}" \
       -o /usr/local/lib/docker/cli-plugins/docker-compose
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
   fi

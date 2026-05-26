@@ -74,10 +74,10 @@ jobs:
         if: steps.ec2.outputs.state != 'running'
         id: launch
         run: |
-          # Latest Amazon Linux 2023 x86_64 AMI
+          # Latest Amazon Linux 2023 arm64 AMI (for t4g.large Graviton)
           AMI_ID=$(aws ec2 describe-images \
             --owners amazon \
-            --filters "Name=name,Values=al2023-ami-*-x86_64" "Name=state,Values=available" \
+            --filters "Name=name,Values=al2023-ami-*-arm64" "Name=state,Values=available" \
             --query "sort_by(Images, &CreationDate)[-1].ImageId" \
             --output text)
           echo "AMI: $AMI_ID"
@@ -114,7 +114,7 @@ jobs:
 
           INSTANCE_ID=$(aws ec2 run-instances \
             --image-id "$AMI_ID" \
-            --instance-type t3.large \
+            --instance-type t4g.large \
             --iam-instance-profile Name=IntelliOps-Monitor-Profile \
             --security-group-ids "$SG_ID" \
             --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
