@@ -55,6 +55,13 @@ chmod +x nginx/init-cert.sh
 # Ensure ollama is running (start only — never recreate, image is 3.8 GB)
 $COMPOSE up -d --no-recreate ollama 2>/dev/null || true
 
+# Pull the default model if not already present (idempotent — ollama skips if cached)
+OLLAMA_MODEL_NAME="${OLLAMA_MODEL:-llama3.2}"
+echo "Ensuring Ollama model '${OLLAMA_MODEL_NAME}' is available…"
+$COMPOSE exec -T ollama ollama pull "${OLLAMA_MODEL_NAME}" \
+  && echo "Model '${OLLAMA_MODEL_NAME}' ready" \
+  || echo "NOTE: model pull failed — Ollama may still be starting, will retry on next deploy"
+
 # Apply IAM inline policy update so EC2/RDS monitoring permissions stay current
 echo "Refreshing IAM inline policy…"
 aws iam put-role-policy \
