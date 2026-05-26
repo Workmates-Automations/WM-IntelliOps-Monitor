@@ -435,6 +435,75 @@ def _list_date_prefixes(days: int = 2) -> List[str]:
     ]
 
 
+def _job_record_to_event(rec: Dict, agent_type: str) -> Optional[Dict]:
+    """Convert a Strands / Ollama job record to the AI monitoring event schema."""
+    status      = rec.get("status", "")
+    completed   = rec.get("completedAt") or 0
+    started     = rec.get("startedAt")   or 0
+    if not completed:
+        return None  # still running
+
+    is_valid    = status in ("completed", "requires_approval")
+    latency_ms  = int((completed - started) * 1000) if started else 0
+    confidence  = 0.85 if status == "completed" else (0.70 if status == "requires_approval" else 0.0)
+    response    = rec.get("response", "") or ""
+    error_msg   = rec.get("error") if not is_valid else None
+
+    return {
+        "timestamp":       int(completed * 1000),
+        "agent_type":      agent_type,
+        "job_id":          rec.get("jobId", ""),
+        "latency_ms":      latency_ms,
+        "response_length": len(response),
+        "error":           error_msg,
+        "validation": {
+            "is_valid":        is_valid,
+            "is_hallucination": False,
+            "confidence":      confidence,
+        },
+        "_source": "job_store",
+    }
+
+
+def _read_job_stores(days: int = 2, limit: int = 150) -> List[Dict]:
+    """
+    Read Strands + Ollama job stores as a fallback when ai-monitoring/events/ is empty.
+    Uses timestamp-prefix StartAfter to skip records older than `days` days.
+    """
+    s3         = _s3()
+    cutoff_ts  = int(time.time() - days * 86400)
+    results: List[Dict] = []
+
+    sources = [
+        ("strands-jobs/", "strands-jobs/strands-", "strands_agent"),
+        ("ollama-jobs/",  "ollama-jobs/ollama-",   "ollama_executor"),
+    ]
+    for prefix_dir, start_key_prefix, agent_type in sources:
+        start_after = f"{start_key_prefix}{cutoff_ts}"
+        try:
+            paginator = s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(
+                Bucket=_AI_BUCKET,
+                Prefix=prefix_dir,
+                StartAfter=start_after,
+                MaxKeys=min(limit, 300),
+            ):
+                for obj in page.get("Contents", []):
+                    try:
+                        body = s3.get_object(Bucket=_AI_BUCKET, Key=obj["Key"])["Body"].read()
+                        rec  = json.loads(body)
+                        ev   = _job_record_to_event(rec, agent_type)
+                        if ev:
+                            results.append(ev)
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.debug("_read_job_stores %s: %s", prefix_dir, exc)
+
+    results.sort(key=lambda e: e.get("timestamp", 0), reverse=True)
+    return results[:limit]
+
+
 def _read_ai_events(days: int = 2, limit: int = 200) -> List[Dict]:
     s3 = _s3()
     keys: List[str] = []
@@ -454,6 +523,11 @@ def _read_ai_events(days: int = 2, limit: int = 200) -> List[Dict]:
         except Exception:
             pass
     events.sort(key=lambda e: e.get("timestamp", 0), reverse=True)
+
+    # If no dedicated event-log entries exist yet, fall back to job stores
+    if not events:
+        events = _read_job_stores(days=days, limit=limit)
+
     return events
 
 
