@@ -336,25 +336,31 @@ def _bedrock_agents(account_id: str = "", region: str = _HOME_REGION) -> List[Di
             for a in page.get("agentSummaries", []):
                 aid        = a.get("agentId", "")
                 raw_status = a.get("agentStatus", "UNKNOWN")
+                # Correct AWS/Bedrock metric names — dimension AgentId for per-agent data
                 dims = [{"Name": "AgentId", "Value": aid}]
-                invocations  = _metric_sum(cw, "AWS/Bedrock", "InvocationsCount",                  dims, minutes=1440)
-                success_pct  = _metric_avg(cw, "AWS/Bedrock", "PercentageOfSuccessfulResponses",   dims, minutes=1440)
-                latency      = _metric_avg(cw, "AWS/Bedrock", "ResponseLatency",                   dims, minutes=1440)
-                user_errors  = _metric_sum(cw, "AWS/Bedrock", "UserErrors",                        dims, minutes=1440)
-                server_errors= _metric_sum(cw, "AWS/Bedrock", "ServerErrors",                      dims, minutes=1440)
+                invocations   = _metric_sum(cw, "AWS/Bedrock", "Invocations",            dims, minutes=1440)
+                latency       = _metric_avg(cw, "AWS/Bedrock", "InvocationLatency",      dims, minutes=1440)
+                client_errors = _metric_sum(cw, "AWS/Bedrock", "InvocationClientErrors", dims, minutes=1440)
+                server_errors = _metric_sum(cw, "AWS/Bedrock", "InvocationServerErrors", dims, minutes=1440)
+                throttles     = _metric_sum(cw, "AWS/Bedrock", "InvocationThrottles",    dims, minutes=1440)
+                success_pct   = (
+                    round((invocations - client_errors - server_errors) / invocations * 100, 1)
+                    if invocations > 0 else 0
+                )
                 agents.append({
-                    "agent_id":        aid,
-                    "agent_name":      a.get("agentName", aid),
-                    "agent_status":    raw_status,
-                    "description":     (a.get("description") or "")[:120],
-                    "latest_version":  a.get("latestAgentVersion", ""),
-                    "updated_at":      str(a.get("updatedAt", "")),
-                    "health":          _BEDROCK_AGENT_HEALTH.get(raw_status, "unknown"),
-                    "invocations_24h": int(invocations),
-                    "success_rate":    round(success_pct, 1) if success_pct else 0,
-                    "avg_latency_ms":  round(latency) if latency else 0,
-                    "user_errors_24h": int(user_errors),
+                    "agent_id":          aid,
+                    "agent_name":        a.get("agentName", aid),
+                    "agent_status":      raw_status,
+                    "description":       (a.get("description") or "")[:120],
+                    "latest_version":    a.get("latestAgentVersion", ""),
+                    "updated_at":        str(a.get("updatedAt", "")),
+                    "health":            _BEDROCK_AGENT_HEALTH.get(raw_status, "unknown"),
+                    "invocations_24h":   int(invocations),
+                    "success_rate":      success_pct,
+                    "avg_latency_ms":    round(latency) if latency else 0,
+                    "user_errors_24h":   int(client_errors),
                     "server_errors_24h": int(server_errors),
+                    "throttles_24h":     int(throttles),
                 })
         agents.sort(key=lambda x: x["agent_name"].lower())
         return agents
@@ -367,8 +373,9 @@ def _bedrock_model_metrics(account_id: str = "", region: str = _HOME_REGION) -> 
     """Aggregate Bedrock model-invocation metrics from CloudWatch (last 24h)."""
     try:
         cw = _cw(account_id, region)
+        # No dimension = aggregate across all models in the account/region
         return {
-            "total_invocations_24h": int(_metric_sum(cw, "AWS/Bedrock", "InvocationCount",         [], minutes=1440)),
+            "total_invocations_24h": int(_metric_sum(cw, "AWS/Bedrock", "Invocations",            [], minutes=1440)),
             "avg_latency_ms":        round(_metric_avg(cw, "AWS/Bedrock", "InvocationLatency",      [], minutes=1440)),
             "client_errors_24h":     int(_metric_sum(cw, "AWS/Bedrock", "InvocationClientErrors",  [], minutes=1440)),
             "server_errors_24h":     int(_metric_sum(cw, "AWS/Bedrock", "InvocationServerErrors",  [], minutes=1440)),
