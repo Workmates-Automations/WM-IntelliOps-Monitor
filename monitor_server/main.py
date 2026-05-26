@@ -3,14 +3,21 @@ IntelliOps EC2 Monitor Server
 Standalone FastAPI server that monitors the IntelliOps platform itself.
 
 Routes:
-  GET  /api/product-monitoring        — Lambda / API GW / DynamoDB / EC2 / RDS health
+  GET  /api/application-monitoring    — Lambda / API GW / DynamoDB / EC2 / RDS health
+  GET  /api/product-monitoring        — (alias for backward compat)
   GET  /api/ai-monitoring             — AI agent event metrics from S3
   POST /api/ai-monitoring/log         — Log an AI agent event to S3
   GET  /api/ai-monitoring/agent-status — Live per-agent status overview
+  POST /api/ai-monitoring/llm-judge   — LLM-as-a-judge evaluation (Langfuse-style)
   GET  /api/cloudwatch-dashboards     — List CW dashboards (cross-account aware)
   GET  /api/service-uptime            — Service uptime and SLA summary
   POST /api/chat                      — Ollama-powered assistant (cross-account aware)
   GET  /health                        — Server health + Ollama status
+
+Open-source monitoring integrations:
+  - Grafana: connect to CloudWatch datasource for Lambda/API GW dashboards
+  - Loki Stack: ship application logs via Promtail → Loki → Grafana
+  - EFK: Fluent Bit → Elasticsearch → Kibana for structured log search
 
 Cross-account: uses CWMSessionRole via STS AssumeRole (same pattern as portal).
 """
@@ -682,8 +689,8 @@ async def health():
     }
 
 
-@app.get("/api/product-monitoring")
-def product_monitoring(
+@app.get("/api/application-monitoring")
+def application_monitoring(
     account_id: str = Query(default=""),
     region:     str = Query(default=""),
     include_ec2: bool = Query(default=True),
@@ -762,7 +769,87 @@ def product_monitoring(
         "account_id":      acc,
         "region":          reg,
         "generated_at":    time.time(),
+        "open_source_integrations": {
+            "grafana": {
+                "description": "Grafana with CloudWatch datasource for Lambda/API GW dashboards",
+                "datasource": "cloudwatch",
+                "docs": "https://grafana.com/docs/grafana/latest/datasources/aws-cloudwatch/",
+            },
+            "loki_stack": {
+                "description": "Loki + Promtail + Grafana for application log aggregation",
+                "shipper": "Promtail / Fluent Bit",
+                "docs": "https://grafana.com/docs/loki/latest/",
+            },
+            "efk": {
+                "description": "Elasticsearch + Fluent Bit + Kibana for structured log search",
+                "shipper": "Fluent Bit",
+                "docs": "https://www.elastic.co/guide/en/elastic-stack-get-started/current/get-started-docker.html",
+            },
+        },
     }
+
+
+# Backward-compat alias
+app.get("/api/product-monitoring")(application_monitoring)
+
+
+class LLMJudgeRequest(BaseModel):
+    prompt:   str
+    response: str
+    context:  Optional[str] = None
+    criteria: Optional[List[str]] = None
+
+
+@app.post("/api/ai-monitoring/llm-judge")
+async def llm_judge(req: LLMJudgeRequest):
+    """
+    LLM-as-a-judge evaluation (Langfuse-style).
+    Uses the local Ollama model to score an AI response on:
+      accuracy, relevance, groundedness, hallucination_risk, helpfulness
+    Returns scores 1-5 and brief reasoning for each criterion.
+    """
+    default_criteria = ["accuracy", "relevance", "groundedness", "hallucination_risk", "helpfulness"]
+    criteria = req.criteria or default_criteria
+
+    judge_prompt = (
+        "You are an expert AI evaluator. Score the following AI response on each criterion from 1 (poor) to 5 (excellent).\n\n"
+        f"Original Prompt:\n{req.prompt[:1000]}\n\n"
+        + (f"Context:\n{req.context[:500]}\n\n" if req.context else "")
+        + f"AI Response:\n{req.response[:1500]}\n\n"
+        "Evaluate on these criteria:\n"
+        + "\n".join(f"- {c}" for c in criteria)
+        + "\n\nRespond ONLY with a JSON object like:\n"
+        '{"accuracy":4,"relevance":5,"groundedness":3,"hallucination_risk":2,"helpfulness":4,'
+        '"reasoning":"Brief 1-2 sentence explanation","overall_score":3.6}'
+    )
+    try:
+        _timeout = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=_timeout) as client:
+            r = await client.post(
+                f"{_OLLAMA_URL}/api/generate",
+                json={"model": _OLLAMA_MODEL, "prompt": judge_prompt, "stream": False},
+            )
+        r.raise_for_status()
+        raw = r.json().get("response", "")
+        # Strip markdown fences
+        import re as _re
+        raw = _re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip(), flags=_re.MULTILINE).strip()
+        # Find first { ... }
+        m = _re.search(r'\{.*\}', raw, _re.DOTALL)
+        scores = json.loads(m.group(0)) if m else {}
+        if not any(c in scores for c in criteria):
+            raise ValueError("No criterion scores in response")
+        # Compute overall if not present
+        if "overall_score" not in scores:
+            vals = [float(scores[c]) for c in criteria if c in scores]
+            scores["overall_score"] = round(sum(vals) / len(vals), 2) if vals else 0.0
+        return {"success": True, "scores": scores, "criteria": criteria, "model": _OLLAMA_MODEL}
+    except Exception as exc:
+        logger.warning("LLM judge failed: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f"{type(exc).__name__}: {exc}"},
+        )
 
 
 @app.get("/api/ai-monitoring")
