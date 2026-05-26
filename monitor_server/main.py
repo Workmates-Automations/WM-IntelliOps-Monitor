@@ -633,8 +633,10 @@ async def _ollama_chat(prompt: str, system: str = "") -> str:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
     payload = {"model": model, "messages": messages, "stream": False}
+    # 300s timeout — llama3.2 on CPU-only EC2 can take 3-4 minutes for long prompts
+    _timeout = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=_timeout) as client:
             r = await client.post(f"{_OLLAMA_URL}/api/chat", json=payload)
             if r.status_code == 404:
                 # Older Ollama or model not pulled — fallback to /api/generate
@@ -649,9 +651,10 @@ async def _ollama_chat(prompt: str, system: str = "") -> str:
             r.raise_for_status()
             return r.json().get("message", {}).get("content", "")
     except Exception as exc:
-        logger.warning("Ollama error: %s", exc)
+        exc_detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+        logger.warning("Ollama error: %s", exc_detail)
         hint = f" (available: {', '.join(available_models[:3])})" if available_models else " (no models loaded — run: docker compose exec ollama ollama pull llama3.2)"
-        return f"Ollama error{hint}: {exc}"
+        return f"Ollama error{hint}: {exc_detail}"
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
