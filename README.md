@@ -126,3 +126,4 @@ docker exec intelliops-ollama ollama pull mistral
 # Check Ollama models
 docker exec intelliops-ollama ollama list
 ```
+
