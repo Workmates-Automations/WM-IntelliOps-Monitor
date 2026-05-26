@@ -117,6 +117,10 @@ def _rds_client(account_id: str = "", region: str = _HOME_REGION):
     return _session(account_id, region).client("rds", region_name=region)
 
 
+def _lambda_client(account_id: str = "", region: str = _HOME_REGION):
+    return _session(account_id, region).client("lambda", region_name=region)
+
+
 # ── Time helpers ───────────────────────────────────────────────────────────────
 
 from datetime import datetime, timedelta, timezone
@@ -162,6 +166,24 @@ def _metric_max(cw_client, namespace: str, metric: str, dims: list, minutes: int
         return max((p.get("Maximum", 0) for p in pts), default=0.0)
     except Exception:
         return 0.0
+
+
+# ── Lambda auto-discovery ─────────────────────────────────────────────────────
+
+def _lambda_list(account_id: str = "", region: str = _HOME_REGION) -> List[str]:
+    """Return all Lambda function names; falls back to env-var list if set."""
+    if _LAMBDAS:
+        return _LAMBDAS
+    try:
+        client = _lambda_client(account_id, region)
+        names: List[str] = []
+        for page in client.get_paginator("list_functions").paginate():
+            for fn in page.get("Functions", []):
+                names.append(fn["FunctionName"])
+        return names
+    except Exception as exc:
+        logger.warning("lambda_list: %s", exc)
+        return []
 
 
 # ── Lambda stats ──────────────────────────────────────────────────────────────
@@ -288,6 +310,89 @@ def _rds_health_stats(account_id: str = "", region: str = _HOME_REGION) -> List[
     except Exception as exc:
         logger.warning("rds_health_stats: %s", exc)
         return []
+
+
+# ── Bedrock helpers ───────────────────────────────────────────────────────────
+
+_BEDROCK_AGENT_HEALTH = {
+    "PREPARED":    "healthy",
+    "NOT_PREPARED": "warning",
+    "PREPARING":   "warning",
+    "CREATING":    "warning",
+    "VERSIONING":  "warning",
+    "FAILED":      "critical",
+    "DELETING":    "critical",
+}
+
+
+def _bedrock_agents(account_id: str = "", region: str = _HOME_REGION) -> List[Dict]:
+    """List all Bedrock Agents with status + last-24h CloudWatch metrics."""
+    try:
+        sess = _session(account_id, region)
+        ba   = sess.client("bedrock-agent", region_name=region)
+        cw   = _cw(account_id, region)
+        agents: List[Dict] = []
+        for page in ba.get_paginator("list_agents").paginate():
+            for a in page.get("agentSummaries", []):
+                aid        = a.get("agentId", "")
+                raw_status = a.get("agentStatus", "UNKNOWN")
+                dims = [{"Name": "AgentId", "Value": aid}]
+                invocations  = _metric_sum(cw, "AWS/Bedrock", "InvocationsCount",                  dims, minutes=1440)
+                success_pct  = _metric_avg(cw, "AWS/Bedrock", "PercentageOfSuccessfulResponses",   dims, minutes=1440)
+                latency      = _metric_avg(cw, "AWS/Bedrock", "ResponseLatency",                   dims, minutes=1440)
+                user_errors  = _metric_sum(cw, "AWS/Bedrock", "UserErrors",                        dims, minutes=1440)
+                server_errors= _metric_sum(cw, "AWS/Bedrock", "ServerErrors",                      dims, minutes=1440)
+                agents.append({
+                    "agent_id":        aid,
+                    "agent_name":      a.get("agentName", aid),
+                    "agent_status":    raw_status,
+                    "description":     (a.get("description") or "")[:120],
+                    "latest_version":  a.get("latestAgentVersion", ""),
+                    "updated_at":      str(a.get("updatedAt", "")),
+                    "health":          _BEDROCK_AGENT_HEALTH.get(raw_status, "unknown"),
+                    "invocations_24h": int(invocations),
+                    "success_rate":    round(success_pct, 1) if success_pct else 0,
+                    "avg_latency_ms":  round(latency) if latency else 0,
+                    "user_errors_24h": int(user_errors),
+                    "server_errors_24h": int(server_errors),
+                })
+        agents.sort(key=lambda x: x["agent_name"].lower())
+        return agents
+    except Exception as exc:
+        logger.warning("bedrock_agents: %s", exc)
+        return []
+
+
+def _bedrock_model_metrics(account_id: str = "", region: str = _HOME_REGION) -> Dict:
+    """Aggregate Bedrock model-invocation metrics from CloudWatch (last 24h)."""
+    try:
+        cw = _cw(account_id, region)
+        return {
+            "total_invocations_24h": int(_metric_sum(cw, "AWS/Bedrock", "InvocationCount",         [], minutes=1440)),
+            "avg_latency_ms":        round(_metric_avg(cw, "AWS/Bedrock", "InvocationLatency",      [], minutes=1440)),
+            "client_errors_24h":     int(_metric_sum(cw, "AWS/Bedrock", "InvocationClientErrors",  [], minutes=1440)),
+            "server_errors_24h":     int(_metric_sum(cw, "AWS/Bedrock", "InvocationServerErrors",  [], minutes=1440)),
+            "throttles_24h":         int(_metric_sum(cw, "AWS/Bedrock", "InvocationThrottles",      [], minutes=1440)),
+        }
+    except Exception as exc:
+        logger.warning("bedrock_model_metrics: %s", exc)
+        return {}
+
+
+def _bedrock_logging_status(account_id: str = "", region: str = _HOME_REGION) -> Dict:
+    """Check whether Bedrock model-invocation logging is enabled."""
+    try:
+        bedrock = _session(account_id, region).client("bedrock", region_name=region)
+        lc = bedrock.get_model_invocation_logging_configuration().get("loggingConfig", {})
+        return {
+            "enabled":             bool(lc.get("cloudWatchConfig") or lc.get("s3Config")),
+            "cloudwatch_enabled":  bool(lc.get("cloudWatchConfig")),
+            "s3_enabled":          bool(lc.get("s3Config")),
+            "log_group":           (lc.get("cloudWatchConfig") or {}).get("logGroupName", ""),
+        }
+    except Exception as exc:
+        logger.warning("bedrock_logging_status: %s", exc)
+        return {"enabled": False, "cloudwatch_enabled": False, "s3_enabled": False, "log_group": ""}
 
 
 def _active_alarms(cw_client) -> List[Dict]:
@@ -500,19 +605,46 @@ def _check_service_endpoints() -> List[Dict]:
 # ── Ollama helper ─────────────────────────────────────────────────────────────
 
 async def _ollama_chat(prompt: str, system: str = "") -> str:
+    # Discover available models so we can fall back gracefully
+    available_models: List[str] = []
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"{_OLLAMA_URL}/api/tags")
+            if r.status_code == 200:
+                available_models = [m.get("name", "") for m in r.json().get("models", [])]
+    except Exception:
+        pass
+
+    model = _OLLAMA_MODEL
+    if available_models:
+        base = model.split(":")[0]
+        matches = [m for m in available_models if m == model or m.startswith(base)]
+        model = matches[0] if matches else available_models[0]
+
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
-    payload = {"model": _OLLAMA_MODEL, "messages": messages, "stream": False}
+    payload = {"model": model, "messages": messages, "stream": False}
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             r = await client.post(f"{_OLLAMA_URL}/api/chat", json=payload)
+            if r.status_code == 404:
+                # Older Ollama or model not pulled — fallback to /api/generate
+                gen_payload = {
+                    "model": model,
+                    "prompt": (f"System: {system}\n\n" if system else "") + f"User: {prompt}\nAssistant:",
+                    "stream": False,
+                }
+                r = await client.post(f"{_OLLAMA_URL}/api/generate", json=gen_payload)
+                r.raise_for_status()
+                return r.json().get("response", "")
             r.raise_for_status()
             return r.json().get("message", {}).get("content", "")
     except Exception as exc:
         logger.warning("Ollama error: %s", exc)
-        return f"Ollama unavailable: {exc}"
+        hint = f" (available: {', '.join(available_models[:3])})" if available_models else " (no models loaded — run: docker compose exec ollama ollama pull llama3.2)"
+        return f"Ollama error{hint}: {exc}"
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -551,7 +683,8 @@ def product_monitoring(
     reg = region or _HOME_REGION
     cw  = _cw(acc, reg)
 
-    lambda_data  = [_lambda_stats(cw, fn) for fn in _LAMBDAS] if _LAMBDAS else []
+    lambda_names = _lambda_list(acc, reg)
+    lambda_data  = [_lambda_stats(cw, fn) for fn in lambda_names]
     api_data     = _apigw_stats(cw)
     dynamo_data  = [_dynamo_stats(cw, t) for t in _DYNAMO_TABLES]
     alarms       = _active_alarms(cw)
@@ -801,6 +934,36 @@ def cw_dashboards(
     except Exception as exc:
         logger.warning("list_dashboards: %s", exc)
     return {"account_id": acc, "region": reg, "dashboards": dashboards, "count": len(dashboards)}
+
+
+@app.get("/api/bedrock-agents")
+def bedrock_agents_route(
+    account_id: str = Query(default=""),
+    region:     str = Query(default=""),
+):
+    """List all Bedrock Agents with deployment status and 24h CloudWatch metrics."""
+    acc = account_id or _HOME_ACCOUNT
+    reg = region or _HOME_REGION
+    agents  = _bedrock_agents(acc, reg)
+    metrics = _bedrock_model_metrics(acc, reg)
+    logging_status = _bedrock_logging_status(acc, reg)
+    healthy  = sum(1 for a in agents if a["health"] == "healthy")
+    warning  = sum(1 for a in agents if a["health"] == "warning")
+    critical = sum(1 for a in agents if a["health"] == "critical")
+    unknown  = sum(1 for a in agents if a["health"] == "unknown")
+    return {
+        "agents":          agents,
+        "total_agents":    len(agents),
+        "healthy":         healthy,
+        "warning":         warning,
+        "critical":        critical,
+        "unknown":         unknown,
+        "bedrock_metrics": metrics,
+        "logging_status":  logging_status,
+        "account_id":      acc,
+        "region":          reg,
+        "generated_at":    time.time(),
+    }
 
 
 class ChatRequest(BaseModel):

@@ -50,9 +50,6 @@
       <button onclick="showTab('agents')"    id="tab-agents"    class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-white flex items-center gap-2.5">
         <span>🧠</span> Agent Status
       </button>
-      <button onclick="showTab('cw')"        id="tab-cw"        class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-white flex items-center gap-2.5">
-        <span>☁️</span> CW Dashboards
-      </button>
       <button onclick="showTab('uptime')"    id="tab-uptime"    class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-white flex items-center gap-2.5">
         <span>🟢</span> Service Uptime
       </button>
@@ -92,9 +89,10 @@
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-xl font-bold text-white">AI Monitoring</h1>
-          <p class="text-xs text-slate-500 mt-0.5">Response validation · Hallucination detection · Latency tracking</p>
+          <p class="text-xs text-slate-500 mt-0.5">Bedrock invocations · Response validation · Hallucination detection · Latency</p>
         </div>
         <div class="flex gap-2 items-center">
+          <input id="ai-account" placeholder="Account ID" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-indigo-500 w-40" />
           <select id="ai-days" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none">
             <option value="1">Last 24h</option>
             <option value="2" selected>Last 48h</option>
@@ -113,29 +111,17 @@
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-xl font-bold text-white">Agent Status</h1>
-          <p class="text-xs text-slate-500 mt-0.5">Live status for all AI agents — Nexus · Strands · DevOps · RCA · Security</p>
+          <p class="text-xs text-slate-500 mt-0.5">All Bedrock Agents in ap-south-1 — deployment status + 24h invocation metrics</p>
         </div>
-        <button onclick="loadAgents()" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">↺ Refresh</button>
+        <div class="flex gap-2">
+          <input id="agents-account" placeholder="Account ID" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-indigo-500 w-44" />
+          <input id="agents-region" placeholder="Region" value="ap-south-1" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-indigo-500 w-32" />
+          <button onclick="loadAgents()" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">↺ Refresh</button>
+        </div>
       </div>
       <div id="agents-content">
         <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="spinner w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31 11"/></svg>Loading…</div>
       </div>
-    </div>
-
-    <!-- ── CloudWatch Dashboards ───────────────────────────────────────────── -->
-    <div id="view-cw" class="view hidden fade-in space-y-5">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <h1 class="text-xl font-bold text-white">CloudWatch Dashboards</h1>
-          <p class="text-xs text-slate-500 mt-0.5">Browse dashboards from any linked AWS account</p>
-        </div>
-        <div class="flex gap-2">
-          <input id="cw-account" placeholder="Account ID (optional)" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-indigo-500 w-44" />
-          <input id="cw-region" placeholder="Region" value="ap-south-1" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-indigo-500 w-32" />
-          <button onclick="loadCW()" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">Load</button>
-        </div>
-      </div>
-      <div id="cw-content"><p class="text-sm text-slate-500">Enter an Account ID (or leave blank for home account) and click Load.</p></div>
     </div>
 
     <!-- ── Service Uptime ─────────────────────────────────────────────────── -->
@@ -157,13 +143,15 @@
       <div class="flex items-center gap-3 mb-4 flex-shrink-0">
         <h1 class="text-xl font-bold text-white">AI Assistant</h1>
         <span id="ollama-status" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">–</span>
+        <span id="ollama-models" class="text-xs text-slate-600"></span>
       </div>
       <div id="chat-messages" class="flex-1 overflow-y-auto space-y-3 pr-2 mb-4"></div>
       <form id="chat-form" onsubmit="sendChat(event)" class="flex gap-2 flex-shrink-0">
-        <input id="chat-input" placeholder="Ask about platform health, EC2, Lambda errors, AI agent quality…"
+        <input id="chat-input" placeholder="Ask about platform health, EC2, Lambda errors, Bedrock agents…"
           class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500" />
         <button type="submit" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors">Send</button>
       </form>
+      <div id="ollama-hint" class="text-[11px] text-slate-600 mt-2 hidden">No models loaded — pull one: <code class="text-slate-500">docker compose exec ollama ollama pull llama3.2</code></div>
     </div>
 
   </main>
@@ -178,8 +166,8 @@ function spinner() {
   return '<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="spinner w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31 11"/></svg>Loading…</div>'
 }
 function statusDot(status) {
-  const cls = { healthy:'dot-healthy', warning:'dot-warning', critical:'dot-critical', up:'dot-healthy', down:'dot-critical', unknown:'dot-unknown' }
-  return `<span class="status-dot ${cls[status]||'dot-unknown'} inline-block mt-1"></span>`
+  const cls = { healthy:'dot-healthy', warning:'dot-warning', critical:'dot-critical', up:'dot-healthy', down:'dot-critical', unknown:'dot-unknown', prepared:'dot-healthy', not_prepared:'dot-warning', failed:'dot-critical' }
+  return `<span class="status-dot ${cls[status?.toLowerCase()]||'dot-unknown'} inline-block mt-1"></span>`
 }
 function statusBadge(status) {
   const map = {
@@ -189,8 +177,10 @@ function statusBadge(status) {
     up:       'bg-emerald-900/40 text-emerald-400 border-emerald-800/50',
     down:     'bg-red-900/40 text-red-400 border-red-800/50',
     unknown:  'bg-slate-800 text-slate-400 border-slate-700',
+    prepared: 'bg-emerald-900/40 text-emerald-400 border-emerald-800/50',
   }
-  return `<span class="text-[10px] px-2 py-0.5 rounded-full border font-medium ${map[status]||map.unknown}">${status}</span>`
+  const lc = (status||'unknown').toLowerCase()
+  return `<span class="text-[10px] px-2 py-0.5 rounded-full border font-medium ${map[lc]||map.unknown}">${status||'unknown'}</span>`
 }
 function metricCard(label, value, sub, color='text-white') {
   return `<div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
@@ -213,6 +203,7 @@ function showTab(name) {
   if (name === 'ai')      loadAI()
   if (name === 'agents')  loadAgents()
   if (name === 'uptime')  loadUptime()
+  if (name === 'chat')    initChat()
 }
 
 // ── Health check ──────────────────────────────────────────────────────────────
@@ -220,12 +211,30 @@ async function checkHealth() {
   try {
     const d = await (await fetch('/health')).json()
     const ok = d.ollama === 'online'
+    const models = d.ollama_available_models || []
     const pill = document.getElementById('health-pill')
     pill.textContent = ok ? '● Ollama Online' : '● Ollama Offline'
     pill.className = `text-xs px-3 py-2 rounded-xl font-medium ${ok ? 'bg-emerald-900/30 text-emerald-400' : 'bg-amber-900/30 text-amber-400'}`
     const os = document.getElementById('ollama-status')
-    if (os) { os.textContent = d.ollama + ' · ' + d.ollama_model; os.className = `text-xs px-2 py-0.5 rounded-full ${ok ? 'bg-emerald-900/40 text-emerald-400' : 'bg-amber-900/40 text-amber-400'}` }
+    if (os) {
+      const modelLabel = models.length > 0 ? models[0] : d.ollama_model
+      os.textContent = d.ollama + ' · ' + modelLabel
+      os.className = `text-xs px-2 py-0.5 rounded-full ${ok ? 'bg-emerald-900/40 text-emerald-400' : 'bg-amber-900/40 text-amber-400'}`
+    }
+    const om = document.getElementById('ollama-models')
+    if (om && models.length > 0) om.textContent = `${models.length} model(s): ${models.slice(0,3).join(', ')}`
+    const hint = document.getElementById('ollama-hint')
+    if (hint) hint.classList.toggle('hidden', models.length > 0)
   } catch { /* ignore */ }
+}
+
+// ── Chat init ─────────────────────────────────────────────────────────────────
+function initChat() {
+  checkHealth()
+  const msgs = document.getElementById('chat-messages')
+  if (!msgs.innerHTML.trim()) {
+    msgs.innerHTML = `<div class="flex"><div class="chat-bubble-ai px-4 py-3 text-sm max-w-xl">Hi! I'm your IntelliOps AI Assistant powered by Ollama. Ask me about Lambda errors, EC2 health, Bedrock agents, or any platform metric.</div></div>`
+  }
 }
 
 // ── Product Monitoring ────────────────────────────────────────────────────────
@@ -244,7 +253,7 @@ async function loadProduct() {
     let html = `<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-5">`
     html += metricCard('Health Score', h.score ?? 0, h.status, scoreColor)
     html += metricCard('Active Alarms', (d.active_alarms||[]).length, '', (d.active_alarms||[]).length > 0 ? 'text-red-400' : 'text-emerald-400')
-    html += metricCard('Lambda Fns', (d.lambda_metrics||[]).length, 'monitored')
+    html += metricCard('Lambda Fns', (d.lambda_metrics||[]).length, 'auto-discovered')
     html += metricCard('API Requests', ((d.api_gateway||{}).request_count||0).toLocaleString(), 'last 60 min')
     html += metricCard('EC2 Instances', (d.ec2_instances||[]).length, 'running')
     html += metricCard('RDS Instances', (d.rds_instances||[]).length, 'total')
@@ -275,29 +284,6 @@ async function loadProduct() {
       html += `</div></div>`
     }
 
-    // Lambda table
-    if ((d.lambda_metrics||[]).length > 0) {
-      html += `<div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden mb-4">
-        <div class="px-4 py-3 border-b border-slate-800 text-sm font-semibold text-white">Lambda Metrics</div>
-        <div class="overflow-x-auto"><table class="w-full text-xs"><thead>
-          <tr class="border-b border-slate-800 text-slate-500 text-left">
-            <th class="px-4 py-2">Function</th><th class="px-4 py-2">Invocations</th><th class="px-4 py-2">Errors</th>
-            <th class="px-4 py-2">Error Rate</th><th class="px-4 py-2">Avg Duration</th><th class="px-4 py-2">Status</th>
-          </tr></thead><tbody>`
-      for (const fn of d.lambda_metrics) {
-        const ec = fn.error_rate > 20 ? 'text-red-400' : fn.error_rate > 5 ? 'text-amber-400' : 'text-slate-400'
-        html += `<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
-          <td class="px-4 py-2 text-white font-medium">${escHtml(fn.name)}</td>
-          <td class="px-4 py-2 text-slate-300">${fn.invocations.toLocaleString()}</td>
-          <td class="px-4 py-2 ${fn.errors>0?'text-red-400':'text-slate-400'}">${fn.errors}</td>
-          <td class="px-4 py-2 ${ec}">${fn.error_rate.toFixed(1)}%</td>
-          <td class="px-4 py-2 text-slate-300">${fn.avg_duration_ms}ms</td>
-          <td class="px-4 py-2">${statusBadge(fn.health)}</td>
-        </tr>`
-      }
-      html += `</tbody></table></div></div>`
-    }
-
     // EC2 table
     if ((d.ec2_instances||[]).length > 0) {
       html += `<div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden mb-4">
@@ -310,7 +296,7 @@ async function loadProduct() {
       for (const ec2 of d.ec2_instances) {
         const cpuC = ec2.cpu_pct > 80 ? 'text-red-400' : ec2.cpu_pct > 60 ? 'text-amber-400' : 'text-slate-300'
         html += `<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
-          <td class="px-4 py-2"><div class="text-white font-medium">${escHtml(ec2.name)}</div><div class="text-slate-500">${escHtml(ec2.instance_id)}</div></td>
+          <td class="px-4 py-2"><div class="text-white font-medium">${escHtml(ec2.name)}</div><div class="text-slate-500 font-mono text-[10px]">${escHtml(ec2.instance_id)}</div></td>
           <td class="px-4 py-2 text-slate-400">${escHtml(ec2.type||'')}</td>
           <td class="px-4 py-2 ${cpuC} font-medium">${ec2.cpu_pct}%</td>
           <td class="px-4 py-2 text-slate-400">${ec2.net_in_mb} MB</td>
@@ -328,7 +314,7 @@ async function loadProduct() {
         <div class="overflow-x-auto"><table class="w-full text-xs"><thead>
           <tr class="border-b border-slate-800 text-slate-500 text-left">
             <th class="px-4 py-2">DB Identifier</th><th class="px-4 py-2">Engine</th><th class="px-4 py-2">CPU %</th>
-            <th class="px-4 py-2">Connections</th><th class="px-4 py-2">Free Mem</th><th class="px-4 py-2">Status</th>
+            <th class="px-4 py-2">Connections</th><th class="px-4 py-2">Free Mem</th><th class="px-4 py-2">Free Storage</th><th class="px-4 py-2">Status</th>
           </tr></thead><tbody>`
       for (const rds of d.rds_instances) {
         const cpuC = rds.cpu_pct > 80 ? 'text-red-400' : rds.cpu_pct > 60 ? 'text-amber-400' : 'text-slate-300'
@@ -338,7 +324,35 @@ async function loadProduct() {
           <td class="px-4 py-2 ${cpuC} font-medium">${rds.cpu_pct}%</td>
           <td class="px-4 py-2 text-slate-300">${rds.connections}</td>
           <td class="px-4 py-2 text-slate-400">${rds.freeable_memory_gb} GB</td>
+          <td class="px-4 py-2 text-slate-400">${rds.free_storage_gb} GB</td>
           <td class="px-4 py-2">${statusBadge(rds.health)}</td>
+        </tr>`
+      }
+      html += `</tbody></table></div></div>`
+    }
+
+    // Lambda table
+    if ((d.lambda_metrics||[]).length > 0) {
+      html += `<div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden mb-4">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <span class="text-sm font-semibold text-white">Lambda Functions</span>
+          <span class="text-xs text-slate-500">${d.lambda_metrics.length} functions · last 60 min</span>
+        </div>
+        <div class="overflow-x-auto"><table class="w-full text-xs"><thead>
+          <tr class="border-b border-slate-800 text-slate-500 text-left">
+            <th class="px-4 py-2">Function</th><th class="px-4 py-2">Invocations</th><th class="px-4 py-2">Errors</th>
+            <th class="px-4 py-2">Error Rate</th><th class="px-4 py-2">Avg Duration</th><th class="px-4 py-2">Throttles</th><th class="px-4 py-2">Status</th>
+          </tr></thead><tbody>`
+      for (const fn of d.lambda_metrics) {
+        const ec = fn.error_rate > 20 ? 'text-red-400' : fn.error_rate > 5 ? 'text-amber-400' : 'text-slate-400'
+        html += `<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+          <td class="px-4 py-2 text-white font-medium max-w-xs truncate">${escHtml(fn.name)}</td>
+          <td class="px-4 py-2 text-slate-300">${fn.invocations.toLocaleString()}</td>
+          <td class="px-4 py-2 ${fn.errors>0?'text-red-400':'text-slate-400'}">${fn.errors}</td>
+          <td class="px-4 py-2 ${ec}">${fn.error_rate.toFixed(1)}%</td>
+          <td class="px-4 py-2 text-slate-300">${fn.avg_duration_ms}ms</td>
+          <td class="px-4 py-2 ${fn.throttles>0?'text-amber-400':'text-slate-400'}">${fn.throttles}</td>
+          <td class="px-4 py-2">${statusBadge(fn.health)}</td>
         </tr>`
       }
       html += `</tbody></table></div></div>`
@@ -388,33 +402,58 @@ async function loadAI() {
   const el   = document.getElementById('ai-content')
   el.innerHTML = spinner()
   const days = document.getElementById('ai-days').value || 2
+  const acc  = document.getElementById('ai-account').value.trim()
   try {
-    const d = await (await fetch(`/api/ai-monitoring?days=${days}&limit=200`)).json()
-    const s = d.summary || {}
-    const sr = s.success_rate ?? 0
-    const srC = sr >= 80 ? 'text-emerald-400' : sr >= 60 ? 'text-amber-400' : 'text-red-400'
-    const hrC = (s.hallucination_rate||0) > 5 ? 'text-red-400' : 'text-emerald-400'
-    const latC = (s.avg_latency_ms||0) > 30000 ? 'text-red-400' : 'text-white'
+    // Fetch S3-based events AND Bedrock metrics in parallel
+    const qs = new URLSearchParams({ days, limit: 200 })
+    const bqs = new URLSearchParams({ region: 'ap-south-1' })
+    if (acc) { bqs.set('account_id', acc) }
+    const [aiRes, bedrockRes] = await Promise.all([
+      fetch(`/api/ai-monitoring?${qs}`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/bedrock-agents?${bqs}`).then(r => r.json()).catch(() => ({})),
+    ])
+    const d  = aiRes
+    const bm = bedrockRes.bedrock_metrics || {}
+    const ls = bedrockRes.logging_status  || {}
+    const s  = d.summary || {}
 
-    let html = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">`
-    html += metricCard('Success Rate', sr + '%', `${s.total??0} total responses`, srC)
-    html += metricCard('Error Rate', (s.error_rate??0) + '%', `${s.invalid??0} invalid`, (s.error_rate||0)>20?'text-red-400':'text-slate-300')
-    html += metricCard('Hallucinations', s.hallucinations??0, `${s.hallucination_rate??0}% rate`, hrC)
-    html += metricCard('Avg Latency', (s.avg_latency_ms??0) + 'ms', `max ${s.max_latency_ms??0}ms`, latC)
+    // ── Bedrock metrics section ────────────────────────────────────────────
+    let html = `<div class="mb-5">
+      <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Amazon Bedrock · Last 24h</div>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3">`
+    html += metricCard('Total Invocations', (bm.total_invocations_24h||0).toLocaleString(), 'model calls', 'text-indigo-400')
+    html += metricCard('Avg Latency', (bm.avg_latency_ms||0) + 'ms', 'all models', (bm.avg_latency_ms||0)>5000?'text-amber-400':'text-white')
+    html += metricCard('Client Errors', bm.client_errors_24h||0, '4xx', (bm.client_errors_24h||0)>0?'text-amber-400':'text-emerald-400')
+    html += metricCard('Server Errors', bm.server_errors_24h||0, '5xx', (bm.server_errors_24h||0)>0?'text-red-400':'text-emerald-400')
+    html += metricCard('Throttles', bm.throttles_24h||0, 'rate limited', (bm.throttles_24h||0)>0?'text-amber-400':'text-emerald-400')
     html += `</div>`
 
-    // Confidence distribution
-    const cd = d.validation_breakdown?.confidence_distribution || {}
-    if (cd.high + cd.medium + cd.low > 0) {
-      html += `<div class="bg-slate-900 rounded-xl border border-slate-800 p-4 mb-5">
-        <div class="text-sm font-semibold text-white mb-3">Confidence Distribution</div>
-        <div class="flex gap-6 text-sm">
-          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-emerald-500 flex-shrink-0"></span><span class="text-slate-300">High ≥0.8: <strong class="text-white">${cd.high||0}</strong></span></div>
-          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-amber-500 flex-shrink-0"></span><span class="text-slate-300">Medium 0.5–0.8: <strong class="text-white">${cd.medium||0}</strong></span></div>
-          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-red-500 flex-shrink-0"></span><span class="text-slate-300">Low &lt;0.5: <strong class="text-white">${cd.low||0}</strong></span></div>
+    // Logging status notice
+    if (!ls.enabled) {
+      html += `<div class="mt-3 bg-amber-900/20 border border-amber-800/40 rounded-xl px-4 py-3 flex items-start gap-3">
+        <span class="text-amber-400 mt-0.5 flex-shrink-0">⚠</span>
+        <div>
+          <div class="text-sm font-medium text-amber-300">Bedrock Model Invocation Logging is not enabled</div>
+          <div class="text-xs text-amber-400/70 mt-0.5">Enable CloudWatch logging in Bedrock settings to see per-model request logs and detailed traces.</div>
         </div>
       </div>`
+    } else {
+      html += `<div class="mt-3 bg-emerald-900/10 border border-emerald-800/30 rounded-xl px-4 py-2 flex items-center gap-2 text-xs text-emerald-400">
+        ✓ Bedrock logging enabled${ls.log_group ? ` → <span class="font-mono text-emerald-300">${escHtml(ls.log_group)}</span>` : ''}
+      </div>`
     }
+    html += `</div>`
+
+    // ── S3-based agent events section ──────────────────────────────────────
+    html += `<div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-2">IntelliOps Agent Events (S3 log store)</div>`
+    const sr  = s.success_rate ?? 0
+    const srC = sr >= 80 ? 'text-emerald-400' : sr >= 60 ? 'text-amber-400' : 'text-red-400'
+    html += `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">`
+    html += metricCard('Success Rate', sr + '%', `${s.total??0} total responses`, srC)
+    html += metricCard('Error Rate', (s.error_rate??0) + '%', `${s.invalid??0} invalid`, (s.error_rate||0)>20?'text-red-400':'text-slate-300')
+    html += metricCard('Hallucinations', s.hallucinations??0, `${s.hallucination_rate??0}% rate`, (s.hallucination_rate||0)>5?'text-red-400':'text-emerald-400')
+    html += metricCard('Avg Latency', (s.avg_latency_ms??0) + 'ms', `max ${s.max_latency_ms??0}ms`, (s.avg_latency_ms||0)>30000?'text-red-400':'text-white')
+    html += `</div>`
 
     // Alerts
     for (const al of (d.alerts||[])) {
@@ -425,7 +464,7 @@ async function loadAI() {
       </div>`
     }
 
-    // Per-agent cards
+    // Per-agent breakdown (S3 events)
     const byAgent = s.by_agent || {}
     if (Object.keys(byAgent).length > 0) {
       html += `<div class="text-sm font-semibold text-white mb-3">Per-Agent Breakdown</div>
@@ -452,71 +491,95 @@ async function loadAI() {
       }
       html += `</div>`
     } else {
-      html += `<div class="text-center py-12 text-slate-500 text-sm">No AI monitoring events found.<br><span class="text-xs">Agents log events to S3 at ai-monitoring/events/</span></div>`
+      html += `<div class="text-center py-8 text-slate-500 text-sm bg-slate-900/50 rounded-xl border border-slate-800">No S3 agent events yet.<br><span class="text-xs">IntelliOps PoC agents log events to S3 at ai-monitoring/events/</span></div>`
     }
     el.innerHTML = html
   } catch (e) { el.innerHTML = `<div class="text-red-400 text-sm">Error: ${escHtml(e.message)}</div>` }
 }
 
-// ── Agent Status ──────────────────────────────────────────────────────────────
+// ── Agent Status (Bedrock) ────────────────────────────────────────────────────
 async function loadAgents() {
   const el = document.getElementById('agents-content')
   el.innerHTML = spinner()
+  const acc = document.getElementById('agents-account').value.trim()
+  const reg = document.getElementById('agents-region').value.trim() || 'ap-south-1'
+  const qs  = new URLSearchParams({ region: reg })
+  if (acc) qs.set('account_id', acc)
   try {
-    const d = await (await fetch('/api/ai-monitoring/agent-status')).json()
+    const d = await (await fetch(`/api/bedrock-agents?${qs}`)).json()
     const agents = d.agents || []
 
-    let html = `<div class="grid grid-cols-4 gap-3 mb-5">`
-    html += metricCard('Total Agents', d.total_agents??0)
-    html += metricCard('Healthy', d.healthy??0, '', 'text-emerald-400')
-    html += metricCard('Warning', d.warning??0, '', (d.warning||0)>0?'text-amber-400':'text-slate-300')
-    html += metricCard('Critical', d.critical??0, '', (d.critical||0)>0?'text-red-400':'text-slate-300')
+    let html = `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">`
+    html += metricCard('Total Agents', d.total_agents ?? 0, 'in ' + reg)
+    html += metricCard('Prepared', d.healthy ?? 0, 'ready', 'text-emerald-400')
+    html += metricCard('Warning', d.warning ?? 0, 'not prepared', (d.warning||0)>0?'text-amber-400':'text-slate-300')
+    html += metricCard('Failed', d.critical ?? 0, 'error state', (d.critical||0)>0?'text-red-400':'text-slate-300')
+    html += metricCard('Unknown', d.unknown ?? 0, '', 'text-slate-400')
     html += `</div>`
 
+    // Bedrock model-level metrics banner
+    const bm = d.bedrock_metrics || {}
+    if (bm.total_invocations_24h > 0 || bm.avg_latency_ms > 0) {
+      html += `<div class="bg-slate-900 rounded-xl border border-slate-800 p-4 mb-5 grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div><div class="text-[11px] text-slate-500">Invocations 24h</div><div class="text-lg font-bold text-indigo-400">${(bm.total_invocations_24h||0).toLocaleString()}</div></div>
+        <div><div class="text-[11px] text-slate-500">Avg Latency</div><div class="text-lg font-bold text-white">${bm.avg_latency_ms||0}ms</div></div>
+        <div><div class="text-[11px] text-slate-500">Client Errors</div><div class="text-lg font-bold ${(bm.client_errors_24h||0)>0?'text-amber-400':'text-emerald-400'}">${bm.client_errors_24h||0}</div></div>
+        <div><div class="text-[11px] text-slate-500">Server Errors</div><div class="text-lg font-bold ${(bm.server_errors_24h||0)>0?'text-red-400':'text-emerald-400'}">${bm.server_errors_24h||0}</div></div>
+        <div><div class="text-[11px] text-slate-500">Throttles</div><div class="text-lg font-bold ${(bm.throttles_24h||0)>0?'text-amber-400':'text-emerald-400'}">${bm.throttles_24h||0}</div></div>
+      </div>`
+    }
+
     if (agents.length === 0) {
-      html += `<div class="text-center py-16 text-slate-500 text-sm">No agent data yet.<br><span class="text-xs">Agents must POST events to /api/ai-monitoring/log to appear here.</span></div>`
+      html += `<div class="text-center py-16 text-slate-500 text-sm bg-slate-900/40 rounded-xl border border-slate-800">
+        No Bedrock agents found in account / region.<br>
+        <span class="text-xs">Ensure bedrock-agent:ListAgents permission is attached to the instance role.</span>
+      </div>`
     } else {
+      // Group: prepared first, then warning, then critical
+      const order = { healthy:0, warning:1, critical:2, unknown:3 }
+      agents.sort((a,b) => (order[a.health]||3) - (order[b.health]||3) || a.agent_name.localeCompare(b.agent_name))
       html += `<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">`
       for (const a of agents) {
-        const statusBorder = a.status === 'healthy' ? 'border-emerald-800/40' : a.status === 'warning' ? 'border-amber-800/40' : a.status === 'critical' ? 'border-red-800/40' : 'border-slate-800'
-        const srC = a.success_rate >= 80 ? 'text-emerald-400' : a.success_rate >= 60 ? 'text-amber-400' : 'text-red-400'
-        html += `<div class="bg-slate-900 rounded-xl border ${statusBorder} p-5">
-          <div class="flex items-start justify-between mb-4">
+        const statusBorder = a.health === 'healthy' ? 'border-emerald-800/40' : a.health === 'warning' ? 'border-amber-800/40' : a.health === 'critical' ? 'border-red-800/40' : 'border-slate-800'
+        const invC = a.invocations_24h > 0 ? 'text-indigo-400' : 'text-slate-500'
+        const srC  = a.success_rate >= 80 ? 'text-emerald-400' : a.success_rate >= 60 ? 'text-amber-400' : a.success_rate > 0 ? 'text-red-400' : 'text-slate-500'
+        html += `<div class="bg-slate-900 rounded-xl border ${statusBorder} p-4">
+          <div class="flex items-start justify-between mb-3">
             <div class="flex items-center gap-2.5">
-              ${statusDot(a.status)}
+              ${statusDot(a.health)}
               <div>
-                <div class="text-sm font-bold text-white">${escHtml(a.display_name)}</div>
-                <div class="text-[10px] text-slate-500 font-mono">${escHtml(a.agent_type)}</div>
+                <div class="text-sm font-bold text-white leading-tight">${escHtml(a.agent_name)}</div>
+                <div class="text-[10px] text-slate-500 font-mono">${escHtml(a.agent_id)}</div>
               </div>
             </div>
-            ${statusBadge(a.status)}
+            ${statusBadge(a.agent_status)}
           </div>
+          ${a.description ? `<div class="text-[11px] text-slate-400 mb-3 leading-relaxed">${escHtml(a.description)}</div>` : ''}
           <div class="grid grid-cols-3 gap-2 text-xs mb-3">
             <div class="text-center bg-slate-800/60 rounded-lg py-2">
-              <div class="${srC} text-lg font-bold">${a.success_rate}%</div>
+              <div class="${invC} text-base font-bold">${a.invocations_24h.toLocaleString()}</div>
+              <div class="text-slate-500">Invocations</div>
+            </div>
+            <div class="text-center bg-slate-800/60 rounded-lg py-2">
+              <div class="${srC} text-base font-bold">${a.success_rate > 0 ? a.success_rate + '%' : '—'}</div>
               <div class="text-slate-500">Success</div>
             </div>
             <div class="text-center bg-slate-800/60 rounded-lg py-2">
-              <div class="text-white text-lg font-bold">${a.total}</div>
-              <div class="text-slate-500">Requests</div>
-            </div>
-            <div class="text-center bg-slate-800/60 rounded-lg py-2">
-              <div class="${a.avg_latency_ms > 30000 ? 'text-red-400' : 'text-white'} text-lg font-bold">${a.avg_latency_ms < 1000 ? a.avg_latency_ms + 'ms' : (a.avg_latency_ms/1000).toFixed(1) + 's'}</div>
+              <div class="${a.avg_latency_ms>5000?'text-amber-400':'text-white'} text-base font-bold">${a.avg_latency_ms > 0 ? a.avg_latency_ms + 'ms' : '—'}</div>
               <div class="text-slate-500">Avg Lat</div>
             </div>
           </div>
-          <div class="flex gap-3 text-xs text-slate-500">
-            <span>Confidence: <strong class="text-white">${(a.avg_confidence*100).toFixed(0)}%</strong></span>
-            <span>Halluc: <strong class="${a.hallucination_rate>5?'text-red-400':'text-white'}">${a.hallucination_rate}%</strong></span>
+          <div class="flex items-center justify-between text-[10px] text-slate-500">
+            <span>v${escHtml(a.latest_version||'—')}</span>
+            ${a.updated_at ? `<span>Updated ${new Date(a.updated_at).toLocaleDateString()}</span>` : ''}
           </div>
-          ${a.last_seen_iso ? `<div class="text-[10px] text-slate-600 mt-2">Last seen ${new Date(a.last_seen_iso).toLocaleString()}</div>` : `<div class="text-[10px] text-slate-600 mt-2">No activity recorded yet</div>`}
-          ${(a.recent_errors||[]).length > 0 ? `<div class="mt-2 text-[10px] text-red-400 bg-red-900/10 rounded p-1.5">${escHtml(a.recent_errors[0])}</div>` : ''}
+          ${(a.user_errors_24h > 0 || a.server_errors_24h > 0) ? `<div class="mt-2 text-[10px] text-red-400 bg-red-900/10 rounded px-2 py-1">Errors 24h: ${a.user_errors_24h} client · ${a.server_errors_24h} server</div>` : ''}
         </div>`
       }
       html += `</div>`
     }
     el.innerHTML = html
-  } catch (e) { el.innerHTML = `<div class="text-red-400 text-sm">Error: ${escHtml(e.message)}</div>` }
+  } catch (e) { el.innerHTML = `<div class="text-red-400 text-sm">Error loading Bedrock agents: ${escHtml(e.message)}</div>` }
 }
 
 // ── Service Uptime ─────────────────────────────────────────────────────────────
@@ -557,39 +620,6 @@ async function loadUptime() {
   } catch (e) { el.innerHTML = `<div class="text-red-400 text-sm">Error: ${escHtml(e.message)}</div>` }
 }
 
-// ── CloudWatch Dashboards ─────────────────────────────────────────────────────
-async function loadCW() {
-  const el  = document.getElementById('cw-content')
-  const acc = document.getElementById('cw-account').value.trim()
-  const reg = document.getElementById('cw-region').value.trim() || 'ap-south-1'
-  el.innerHTML = spinner()
-  try {
-    const qs = new URLSearchParams({ region: reg })
-    if (acc) qs.set('account_id', acc)
-    const d = await (await fetch(`/api/cloudwatch-dashboards?${qs}`)).json()
-    if ((d.dashboards||[]).length === 0) {
-      el.innerHTML = '<div class="text-slate-500 text-sm">No CloudWatch dashboards found in this account/region.</div>'
-      return
-    }
-    let html = `<div class="text-xs text-slate-500 mb-3">${d.count} dashboard(s) in ${escHtml(acc||'home account')} · ${escHtml(reg)}</div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">`
-    for (const dash of d.dashboards) {
-      html += `<div class="bg-slate-900 rounded-xl border border-slate-800 p-4 flex items-start gap-3 hover:border-cyan-800/50 transition-colors">
-        <span class="text-cyan-400 mt-0.5 text-lg flex-shrink-0">⊞</span>
-        <div class="flex-1 min-w-0">
-          <div class="text-sm font-medium text-white truncate">${escHtml(dash.name)}</div>
-          <div class="text-[11px] text-slate-500 mt-1">${escHtml(dash.region)} · ${new Date(dash.last_modified).toLocaleDateString()}</div>
-          <div class="text-[11px] text-slate-600">${((dash.size_bytes||0)/1024).toFixed(1)} KB</div>
-        </div>
-        <a href="${escHtml(dash.console_url)}" target="_blank" rel="noopener"
-          class="text-slate-500 hover:text-cyan-400 transition-colors text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">↗ Open</a>
-      </div>`
-    }
-    html += `</div>`
-    el.innerHTML = html
-  } catch (e) { el.innerHTML = `<div class="text-red-400 text-sm">Error: ${escHtml(e.message)}</div>` }
-}
-
 // ── AI Chat ────────────────────────────────────────────────────────────────────
 async function sendChat(e) {
   e.preventDefault()
@@ -607,11 +637,12 @@ async function sendChat(e) {
       body: JSON.stringify({ prompt: msg }),
     })
     const d = await r.json()
-    document.getElementById('typing').remove()
-    msgs.innerHTML += `<div class="flex"><div class="chat-bubble-ai px-4 py-2.5 text-sm max-w-xl leading-relaxed"><pre>${escHtml(d.response)}</pre></div></div>`
+    document.getElementById('typing')?.remove()
+    const reply = d.response || 'No response'
+    msgs.innerHTML += `<div class="flex"><div class="chat-bubble-ai px-4 py-2.5 text-sm max-w-2xl leading-relaxed"><pre>${escHtml(reply)}</pre></div></div>`
   } catch (err) {
-    try { document.getElementById('typing').remove() } catch {}
-    msgs.innerHTML += `<div class="text-red-400 text-sm">Error: ${escHtml(err.message)}</div>`
+    document.getElementById('typing')?.remove()
+    msgs.innerHTML += `<div class="text-red-400 text-sm px-2">Error: ${escHtml(err.message)}</div>`
   }
   msgs.scrollTop = msgs.scrollHeight
 }

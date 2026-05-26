@@ -68,6 +68,36 @@
         "rds:DescribeDBInstances"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "LambdaDiscovery",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:ListFunctions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockAgentsRead",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:GetModelInvocationLoggingConfiguration",
+        "bedrock:ListFoundationModels",
+        "bedrock-agent:ListAgents",
+        "bedrock-agent:GetAgent",
+        "bedrock-agent:ListAgentAliases"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudWatchLogsRead",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:FilterLogEvents",
+        "logs:GetLogEvents"
+      ],
+      "Resource": "*"
     }
   ]
 }
