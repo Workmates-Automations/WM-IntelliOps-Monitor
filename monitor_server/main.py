@@ -1158,6 +1158,88 @@ async def chat(req: ChatRequest):
     return {"response": reply, "model": _OLLAMA_MODEL, "ts": time.time()}
 
 
+def _compute_job_score(rec: dict, agent_type: str) -> dict:
+    """Compute a 0-100 validation score for a completed job record."""
+    status = rec.get("status", "")
+    base = 80 if status == "completed" else (65 if status == "requires_approval" else 0)
+    response = str(rec.get("response", "") or "")
+    length_bonus = min(15, len(response) // 100)
+    comment_bonus = 5 if rec.get("commentPosted") else 0
+    score = min(100, base + length_bonus + comment_bonus)
+    started   = rec.get("startedAt")   or 0
+    completed = rec.get("completedAt") or 0
+    latency_ms = int((completed - started) * 1000) if started and completed else 0
+    ts = int((completed or started) * 1000) if (completed or started) else 0
+    agent_names = {"strands_agent": "Strands AI Agent", "ollama_executor": "Ollama Executor"}
+    return {
+        "job_id":           rec.get("jobId", ""),
+        "agent_type":       agent_type,
+        "agent_display":    agent_names.get(agent_type, agent_type),
+        "ticket_id":        str(rec.get("ticketId", "") or "").strip(),
+        "status":           status,
+        "validation_score": score,
+        "response_length":  len(response),
+        "comment_posted":   bool(rec.get("commentPosted")),
+        "latency_ms":       latency_ms,
+        "timestamp":        ts,
+        "requested_by":     str(rec.get("requestedBy", "") or ""),
+        "error":            str(rec.get("error", "") or "") if status == "failed" else "",
+    }
+
+
+@app.get("/api/ai-monitoring/jobs")
+def ai_monitoring_jobs(
+    days:       int = Query(default=2, le=7),
+    limit:      int = Query(default=100, le=500),
+    agent_type: str = Query(default=""),
+    status:     str = Query(default=""),
+):
+    """Individual AI job records with computed validation scores (0-100)."""
+    s3_client  = _s3()
+    cutoff_ts  = int(time.time() - days * 86400)
+    results: List[Dict] = []
+    sources = [
+        ("strands-jobs/", "strands-jobs/strands-", "strands_agent"),
+        ("ollama-jobs/",  "ollama-jobs/ollama-",   "ollama_executor"),
+    ]
+    for prefix_dir, start_key_prefix, atype in sources:
+        if agent_type and agent_type != atype:
+            continue
+        start_after = f"{start_key_prefix}{cutoff_ts}"
+        try:
+            paginator = s3_client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(
+                Bucket=_AI_BUCKET, Prefix=prefix_dir,
+                StartAfter=start_after, MaxKeys=300,
+            ):
+                for obj in page.get("Contents", []):
+                    try:
+                        body = s3_client.get_object(Bucket=_AI_BUCKET, Key=obj["Key"])["Body"].read()
+                        rec  = json.loads(body)
+                        rec_status = rec.get("status", "")
+                        if rec_status not in ("completed", "failed", "requires_approval"):
+                            continue
+                        if status and rec_status != status:
+                            continue
+                        results.append(_compute_job_score(rec, atype))
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.debug("ai_monitoring_jobs %s: %s", prefix_dir, exc)
+
+    results.sort(key=lambda j: j.get("timestamp", 0), reverse=True)
+    total = len(results)
+    results = results[:limit]
+    avg_score = round(sum(j["validation_score"] for j in results) / len(results)) if results else 0
+    return {
+        "jobs":        results,
+        "total":       total,
+        "avg_score":   avg_score,
+        "generatedAt": time.time(),
+        "days":        days,
+    }
+
+
 # ── Dashboard HTML ────────────────────────────────────────────────────────────
 
 _HTML_PATH = os.path.join(os.path.dirname(__file__), "dashboard.html")

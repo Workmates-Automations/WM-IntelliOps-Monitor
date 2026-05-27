@@ -23,6 +23,11 @@
     ::-webkit-scrollbar { width:5px; height:5px; }
     ::-webkit-scrollbar-track { background:#0f172a; }
     ::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
+    @keyframes pulseGlow { 0%,100%{opacity:.6} 50%{opacity:1} }
+    .pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
+    @keyframes countUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+    .count-up { animation: countUp 0.4s ease both; }
+    .bar-fill { transition: width 0.8s cubic-bezier(.4,0,.2,1); }
   </style>
 </head>
 <body class="dark bg-slate-950 text-slate-100 min-h-screen">
@@ -42,7 +47,7 @@
     </div>
     <nav class="flex-1 py-3 space-y-0.5 px-2">
       <button onclick="showTab('product')"   id="tab-product"   class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-white flex items-center gap-2.5">
-        <span>📊</span> Product Monitoring
+        <span>📊</span> Application Monitoring
       </button>
       <button onclick="showTab('ai')"        id="tab-ai"        class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-white flex items-center gap-2.5">
         <span>🤖</span> AI Monitoring
@@ -66,12 +71,12 @@
   <!-- Main -->
   <main class="flex-1 overflow-y-auto bg-slate-950 p-6">
 
-    <!-- ── Product Monitoring ──────────────────────────────────────────────── -->
+    <!-- ── Application Monitoring ──────────────────────────────────────────────── -->
     <div id="view-product" class="view hidden fade-in space-y-5">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-xl font-bold text-white">Product Monitoring</h1>
-          <p class="text-xs text-slate-500 mt-0.5">Lambda · API Gateway · DynamoDB · EC2 · RDS · Alarms</p>
+          <h1 class="text-xl font-bold text-white">Application Monitoring</h1>
+          <p class="text-xs text-slate-500 mt-0.5">Lambda · API Gateway · DynamoDB · EC2 · RDS · Alarms — Last 60 min</p>
         </div>
         <div class="flex gap-2">
           <input id="prod-account" placeholder="Account ID (optional)" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-indigo-500 w-44" />
@@ -185,9 +190,134 @@ function statusBadge(status) {
 function metricCard(label, value, sub, color='text-white') {
   return `<div class="bg-slate-900 rounded-xl border border-slate-800 p-4">
     <div class="text-[11px] text-slate-500 mb-1">${label}</div>
-    <div class="text-3xl font-bold ${color}">${value}</div>
+    <div class="text-3xl font-bold ${color} count-up">${value}</div>
     ${sub ? `<div class="text-[11px] text-slate-500 mt-0.5">${sub}</div>` : ''}
   </div>`
+}
+
+function relTime(d) {
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  if (diff < 60) return diff + 's ago'
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago'
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago'
+  return Math.floor(diff/86400) + 'd ago'
+}
+
+function scoreBar(score) {
+  const color = score >= 80 ? '#34d399' : score >= 60 ? '#fbbf24' : '#f87171'
+  const label = score >= 80 ? 'High' : score >= 60 ? 'Medium' : 'Low'
+  return `<div class="flex items-center gap-2">
+    <div class="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+      <div class="h-full bar-fill rounded-full" style="width:${score}%;background:${color}"></div>
+    </div>
+    <span class="text-xs font-bold" style="color:${color}">${score}</span>
+    <span class="text-[10px] text-slate-500">${label}</span>
+  </div>`
+}
+
+function healthGauge(score) {
+  const circ = 351.9
+  const color = score >= 80 ? '#34d399' : score >= 50 ? '#fbbf24' : '#f87171'
+  const filled = (score / 100) * circ
+  const dash = `${filled} ${circ - filled}`
+  return `<svg width="140" height="140" viewBox="0 0 140 140">
+    <circle cx="70" cy="70" r="56" fill="none" stroke="#1e293b" stroke-width="14"/>
+    <circle cx="70" cy="70" r="56" fill="none" stroke="${color}" stroke-width="14"
+      stroke-dasharray="${dash}" stroke-linecap="round"
+      transform="rotate(-90 70 70)" style="transition:stroke-dasharray 0.8s cubic-bezier(.4,0,.2,1)"/>
+    <text x="70" y="76" text-anchor="middle" fill="${color}" font-size="28" font-weight="bold" font-family="system-ui,sans-serif">${score}</text>
+    <text x="70" y="93" text-anchor="middle" fill="#64748b" font-size="9" font-family="system-ui,sans-serif" letter-spacing="1">HEALTH SCORE</text>
+  </svg>`
+}
+
+function smallScoreGauge(score) {
+  const circ = 251.3
+  const color = score >= 80 ? '#34d399' : score >= 60 ? '#fbbf24' : '#f87171'
+  const filled = (score / 100) * circ
+  const dash = `${filled} ${circ - filled}`
+  return `<svg width="60" height="60" viewBox="0 0 60 60">
+    <circle cx="30" cy="30" r="24" fill="none" stroke="#1e293b" stroke-width="6"/>
+    <circle cx="30" cy="30" r="24" fill="none" stroke="${color}" stroke-width="6"
+      stroke-dasharray="${dash}" stroke-linecap="round"
+      transform="rotate(-90 30 30)"/>
+    <text x="30" y="34" text-anchor="middle" fill="${color}" font-size="12" font-weight="bold" font-family="system-ui,sans-serif">${score}</text>
+  </svg>`
+}
+
+function hourlyChart(trend) {
+  const max = Math.max(...trend.map(t => t.count), 1)
+  const w = 700, h = 60, barW = Math.floor(w/24)-2
+  let svg = `<svg viewBox="0 0 ${w} ${h+20}" class="w-full" style="max-height:80px">`
+  for (let i = 0; i < 24; i++) {
+    const count = trend[i]?.count || 0
+    const barH = Math.round((count/max)*h)
+    const x = i * (w/24)
+    const color = count > 0 ? '#6366f1' : '#1e293b'
+    svg += `<rect x="${x}" y="${h-barH}" width="${barW}" height="${barH}" rx="2" fill="${color}"/>`
+    if (i % 4 === 0) svg += `<text x="${x+barW/2}" y="${h+14}" text-anchor="middle" fill="#475569" font-size="8">${i}h</text>`
+  }
+  svg += `</svg>`
+  return svg
+}
+
+function renderJobsTable(jobs) {
+  if (!jobs.length) return '<div class="text-center py-8 text-slate-500 text-sm">No analysis records yet</div>'
+  let html = `
+    <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <span class="text-sm font-semibold text-white">Individual Analysis Records</span>
+        <span class="text-xs text-slate-500">${jobs.length} analyses</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="border-b border-slate-800 text-slate-500 text-left">
+            <th class="px-4 py-2.5">Job ID</th>
+            <th class="px-4 py-2.5">Agent</th>
+            <th class="px-4 py-2.5">Ticket</th>
+            <th class="px-4 py-2.5">Validation Score</th>
+            <th class="px-4 py-2.5">Status</th>
+            <th class="px-4 py-2.5">Posted to Zoho</th>
+            <th class="px-4 py-2.5">Latency</th>
+            <th class="px-4 py-2.5">Time</th>
+          </tr></thead>
+          <tbody>`
+  for (const job of jobs) {
+    const score = job.validation_score ?? Math.round((job.validation?.confidence||0)*100)
+    const status = job.status || (job.validation?.is_valid ? 'completed' : 'failed')
+    const statusCls = status === 'completed' ? 'text-emerald-400' : status === 'requires_approval' ? 'text-amber-400' : 'text-red-400'
+    const statusLabel = status === 'completed' ? '✓ Completed' : status === 'requires_approval' ? '⏳ Approval' : '✗ Failed'
+    const agentName = job.agent_display || (job.agent_type === 'strands_agent' ? 'Strands AI' : job.agent_type === 'ollama_executor' ? 'Ollama' : job.agent_type || 'Unknown')
+    const ticketId = job.ticket_id || job.job_id?.slice(-8) || '—'
+    const postedZoho = job.comment_posted === true ? '<span class="text-emerald-400 font-bold">✓</span>' : '<span class="text-slate-600">—</span>'
+    const latencyMs = job.latency_ms || 0
+    const latency = latencyMs >= 1000 ? (latencyMs/1000).toFixed(1)+'s' : latencyMs+'ms'
+    const ts = job.timestamp ? new Date(job.timestamp > 1e12 ? job.timestamp : job.timestamp*1000) : null
+    const timeAgo = ts ? relTime(ts) : '—'
+    html += `<tr class="border-b border-slate-800/40 hover:bg-slate-800/20">
+      <td class="px-4 py-2.5 font-mono text-slate-400 text-[10px]">${escHtml((job.job_id||'').slice(0,20))}</td>
+      <td class="px-4 py-2.5 text-slate-300">${escHtml(agentName)}</td>
+      <td class="px-4 py-2.5 text-slate-300 font-mono text-[10px]">${escHtml(ticketId)}</td>
+      <td class="px-4 py-2.5">${scoreBar(score)}</td>
+      <td class="px-4 py-2.5 ${statusCls} font-medium">${statusLabel}</td>
+      <td class="px-4 py-2.5 text-center">${postedZoho}</td>
+      <td class="px-4 py-2.5 text-slate-400">${latency}</td>
+      <td class="px-4 py-2.5 text-slate-500">${timeAgo}</td>
+    </tr>`
+  }
+  html += `</tbody></table></div></div>`
+  return html
+}
+
+function filterAIJobs(type) {
+  document.querySelectorAll('.ai-job-filter-btn').forEach(b => {
+    b.classList.remove('bg-indigo-600','text-white'); b.classList.add('bg-slate-800','text-slate-400')
+  })
+  const btnId = type === 'all' ? 'jf-all' : type === 'strands_agent' ? 'jf-strands' : 'jf-ollama'
+  const btn = document.getElementById(btnId)
+  if (btn) { btn.classList.remove('bg-slate-800','text-slate-400'); btn.classList.add('bg-indigo-600','text-white') }
+  const filtered = type === 'all' ? window._aiJobs : window._aiJobs.filter(j => j.agent_type === type)
+  const el = document.getElementById('ai-jobs-table')
+  if (el) el.innerHTML = renderJobsTable(filtered)
 }
 
 // ── Tab router ────────────────────────────────────────────────────────────────
@@ -237,7 +367,7 @@ function initChat() {
   }
 }
 
-// ── Product Monitoring ────────────────────────────────────────────────────────
+// ── Application Monitoring ────────────────────────────────────────────────────
 async function loadProduct() {
   const el = document.getElementById('product-content')
   el.innerHTML = spinner()
@@ -246,18 +376,55 @@ async function loadProduct() {
   const qs  = new URLSearchParams({ region: reg, include_ec2: true, include_rds: true })
   if (acc) qs.set('account_id', acc)
   try {
-    const d = await (await fetch(`/api/product-monitoring?${qs}`)).json()
+    const d = await (await fetch(`/api/application-monitoring?${qs}`)).json()
     const h = d.service_health || {}
-    const scoreColor = h.score >= 80 ? 'text-emerald-400' : h.score >= 50 ? 'text-amber-400' : 'text-red-400'
+    const score = h.score ?? 0
+    const scoreColor = score >= 80 ? '#34d399' : score >= 50 ? '#fbbf24' : '#f87171'
+    const scoreTextColor = score >= 80 ? 'text-emerald-400' : score >= 50 ? 'text-amber-400' : 'text-red-400'
 
-    let html = `<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-5">`
-    html += metricCard('Health Score', h.score ?? 0, h.status, scoreColor)
-    html += metricCard('Active Alarms', (d.active_alarms||[]).length, '', (d.active_alarms||[]).length > 0 ? 'text-red-400' : 'text-emerald-400')
-    html += metricCard('Lambda Fns', (d.lambda_metrics||[]).length, 'auto-discovered')
-    html += metricCard('API Requests', ((d.api_gateway||{}).request_count||0).toLocaleString(), 'last 60 min')
-    html += metricCard('EC2 Instances', (d.ec2_instances||[]).length, 'running')
-    html += metricCard('RDS Instances', (d.rds_instances||[]).length, 'total')
-    html += `</div>`
+    // Health gauge card + status chips
+    const computeOk  = (d.lambda_metrics||[]).every(f => f.health !== 'critical')
+    const apiOk      = !((d.api_gateway||{}).error_rate > 20)
+    const dbOk       = (d.dynamo_db||[]).every(t => (t.read_throttles||0) === 0 && (t.write_throttles||0) === 0)
+    const ec2Ok      = (d.ec2_instances||[]).every(i => i.health !== 'critical')
+    const servicesOk = (d.service_uptime||[]).every(s => s.status === 'up')
+    const alarmsOk   = (d.active_alarms||[]).length === 0
+
+    function chip(label, ok) {
+      return ok
+        ? `<span class="text-[10px] px-2.5 py-1 rounded-full bg-emerald-900/40 text-emerald-400 border border-emerald-800/50 font-medium">${label}</span>`
+        : `<span class="text-[10px] px-2.5 py-1 rounded-full bg-red-900/40 text-red-400 border border-red-800/50 font-medium">${label}</span>`
+    }
+
+    let html = `<div class="bg-slate-900 rounded-xl border border-slate-800 p-5 mb-5 flex items-center gap-8">
+      <div class="flex-shrink-0">${healthGauge(score)}</div>
+      <div class="flex-1">
+        <div class="text-sm font-semibold text-white mb-1">Overall Health</div>
+        <div class="text-xs text-slate-500 mb-3">${escHtml(h.status||'unknown')}</div>
+        <div class="flex flex-wrap gap-2">
+          ${chip('Compute OK', computeOk)}
+          ${chip('API OK', apiOk)}
+          ${chip('Database OK', dbOk)}
+          ${chip('EC2 OK', ec2Ok)}
+          ${chip('Services OK', servicesOk)}
+          ${chip('Alarms', alarmsOk)}
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-3 flex-shrink-0">
+        <div class="text-center bg-slate-800/50 rounded-xl p-3">
+          <div class="text-[10px] text-slate-500 mb-1">Active Alarms</div>
+          <div class="text-xl font-bold ${(d.active_alarms||[]).length > 0 ? 'text-red-400' : 'text-emerald-400'}">${(d.active_alarms||[]).length}</div>
+        </div>
+        <div class="text-center bg-slate-800/50 rounded-xl p-3">
+          <div class="text-[10px] text-slate-500 mb-1">Lambda Fns</div>
+          <div class="text-xl font-bold text-white">${(d.lambda_metrics||[]).length}</div>
+        </div>
+        <div class="text-center bg-slate-800/50 rounded-xl p-3">
+          <div class="text-[10px] text-slate-500 mb-1">API Reqs</div>
+          <div class="text-xl font-bold text-indigo-400">${((d.api_gateway||{}).request_count||0).toLocaleString()}</div>
+        </div>
+      </div>
+    </div>`
 
     // Issues banner
     if ((h.issues||[]).length > 0) {
@@ -272,8 +439,9 @@ async function loadProduct() {
         <div class="text-sm font-semibold text-white mb-3">Service Endpoints</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">`
       for (const svc of d.service_uptime) {
+        const dotClass = svc.status === 'up' ? 'dot-healthy pulse-glow' : svc.status === 'warning' ? 'dot-warning' : 'dot-critical'
         html += `<div class="flex items-center gap-2.5 bg-slate-800/50 rounded-lg px-3 py-2">
-          ${statusDot(svc.status)}
+          <span class="status-dot ${dotClass} inline-block mt-0"></span>
           <div class="min-w-0 flex-1">
             <div class="text-xs font-medium text-white truncate">${escHtml(svc.name)}</div>
             ${svc.latency_ms != null ? `<div class="text-[10px] text-slate-400">${svc.latency_ms}ms</div>` : `<div class="text-[10px] text-red-400">${escHtml(svc.error||'down')}</div>`}
@@ -284,7 +452,7 @@ async function loadProduct() {
       html += `</div></div>`
     }
 
-    // EC2 table
+    // EC2 table with CPU bars
     if ((d.ec2_instances||[]).length > 0) {
       html += `<div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden mb-4">
         <div class="px-4 py-3 border-b border-slate-800 text-sm font-semibold text-white">EC2 Health</div>
@@ -294,11 +462,20 @@ async function loadProduct() {
             <th class="px-4 py-2">Net In</th><th class="px-4 py-2">Net Out</th><th class="px-4 py-2">Status</th>
           </tr></thead><tbody>`
       for (const ec2 of d.ec2_instances) {
-        const cpuC = ec2.cpu_pct > 80 ? 'text-red-400' : ec2.cpu_pct > 60 ? 'text-amber-400' : 'text-slate-300'
+        const cpuPct = ec2.cpu_pct || 0
+        const cpuBarColor = cpuPct >= 80 ? '#f87171' : cpuPct >= 60 ? '#fbbf24' : '#34d399'
+        const cpuTextColor = cpuPct >= 80 ? 'text-red-400' : cpuPct >= 60 ? 'text-amber-400' : 'text-slate-300'
         html += `<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
           <td class="px-4 py-2"><div class="text-white font-medium">${escHtml(ec2.name)}</div><div class="text-slate-500 font-mono text-[10px]">${escHtml(ec2.instance_id)}</div></td>
           <td class="px-4 py-2 text-slate-400">${escHtml(ec2.type||'')}</td>
-          <td class="px-4 py-2 ${cpuC} font-medium">${ec2.cpu_pct}%</td>
+          <td class="px-4 py-2">
+            <div class="flex items-center gap-2">
+              <div class="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full bar-fill rounded-full" style="width:${cpuPct}%;background:${cpuBarColor}"></div>
+              </div>
+              <span class="${cpuTextColor} font-medium">${cpuPct}%</span>
+            </div>
+          </td>
           <td class="px-4 py-2 text-slate-400">${ec2.net_in_mb} MB</td>
           <td class="px-4 py-2 text-slate-400">${ec2.net_out_mb} MB</td>
           <td class="px-4 py-2">${statusBadge(ec2.health)}</td>
@@ -331,7 +508,7 @@ async function loadProduct() {
       html += `</tbody></table></div></div>`
     }
 
-    // Lambda table
+    // Lambda table with error-rate bars
     if ((d.lambda_metrics||[]).length > 0) {
       html += `<div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden mb-4">
         <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
@@ -344,12 +521,21 @@ async function loadProduct() {
             <th class="px-4 py-2">Error Rate</th><th class="px-4 py-2">Avg Duration</th><th class="px-4 py-2">Throttles</th><th class="px-4 py-2">Status</th>
           </tr></thead><tbody>`
       for (const fn of d.lambda_metrics) {
-        const ec = fn.error_rate > 20 ? 'text-red-400' : fn.error_rate > 5 ? 'text-amber-400' : 'text-slate-400'
+        const rate = fn.error_rate || 0
+        const barColor = rate > 20 ? '#f87171' : rate > 5 ? '#fbbf24' : '#34d399'
+        const ec = rate > 20 ? 'text-red-400' : rate > 5 ? 'text-amber-400' : 'text-slate-400'
         html += `<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
           <td class="px-4 py-2 text-white font-medium max-w-xs truncate">${escHtml(fn.name)}</td>
           <td class="px-4 py-2 text-slate-300">${fn.invocations.toLocaleString()}</td>
           <td class="px-4 py-2 ${fn.errors>0?'text-red-400':'text-slate-400'}">${fn.errors}</td>
-          <td class="px-4 py-2 ${ec}">${fn.error_rate.toFixed(1)}%</td>
+          <td class="px-4 py-2">
+            <div class="flex items-center gap-2">
+              <div class="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full bar-fill rounded-full" style="width:${Math.min(rate,100)}%;background:${barColor}"></div>
+              </div>
+              <span class="${ec}">${rate.toFixed(1)}%</span>
+            </div>
+          </td>
           <td class="px-4 py-2 text-slate-300">${fn.avg_duration_ms}ms</td>
           <td class="px-4 py-2 ${fn.throttles>0?'text-amber-400':'text-slate-400'}">${fn.throttles}</td>
           <td class="px-4 py-2">${statusBadge(fn.health)}</td>
@@ -398,27 +584,72 @@ async function loadProduct() {
 }
 
 // ── AI Monitoring ─────────────────────────────────────────────────────────────
+window._aiJobs = []
+
 async function loadAI() {
-  const el   = document.getElementById('ai-content')
+  const el = document.getElementById('ai-content')
   el.innerHTML = spinner()
   const days = document.getElementById('ai-days').value || 2
   const acc  = document.getElementById('ai-account').value.trim()
   try {
-    // Fetch S3-based events AND Bedrock metrics in parallel
-    const qs = new URLSearchParams({ days, limit: 200 })
+    const qs  = new URLSearchParams({ days, limit: 200 })
     const bqs = new URLSearchParams({ region: 'ap-south-1' })
-    if (acc) { bqs.set('account_id', acc) }
-    const [aiRes, bedrockRes] = await Promise.all([
+    const jqs = new URLSearchParams({ days, limit: 100 })
+    if (acc) bqs.set('account_id', acc)
+    const [aiRes, bedrockRes, jobsRes] = await Promise.all([
       fetch(`/api/ai-monitoring?${qs}`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/bedrock-agents?${bqs}`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/ai-monitoring/jobs?${jqs}`).then(r => r.ok ? r.json() : null).catch(() => null),
     ])
     const d  = aiRes
     const bm = bedrockRes.bedrock_metrics || {}
     const ls = bedrockRes.logging_status  || {}
     const s  = d.summary || {}
 
+    // Build jobs list
+    let jobs = []
+    if (jobsRes?.jobs?.length) {
+      jobs = jobsRes.jobs
+    } else if (d.events?.length) {
+      jobs = d.events.map(ev => ({
+        job_id:           ev.job_id || '',
+        agent_type:       ev.agent_type || '',
+        agent_display:    ev.agent_type === 'strands_agent' ? 'Strands AI Agent' : ev.agent_type === 'ollama_executor' ? 'Ollama Executor' : ev.agent_type,
+        ticket_id:        '',
+        status:           ev.validation?.is_valid ? 'completed' : 'failed',
+        validation_score: Math.round((ev.validation?.confidence||0)*100),
+        comment_posted:   false,
+        latency_ms:       ev.latency_ms || 0,
+        timestamp:        ev.timestamp || 0,
+      }))
+    }
+    window._aiJobs = jobs
+
+    // ── Summary KPI row ────────────────────────────────────────────────────
+    const avgScore = jobsRes?.avg_score ?? (jobs.length ? Math.round(jobs.reduce((a,j) => a + (j.validation_score||0), 0) / jobs.length) : 0)
+    const sr  = s.success_rate ?? 0
+    const srC = sr >= 80 ? 'text-emerald-400' : sr >= 60 ? 'text-amber-400' : 'text-red-400'
+    const avgLatMs = s.avg_latency_ms ?? 0
+    const avgLatFmt = avgLatMs >= 1000 ? (avgLatMs/1000).toFixed(1)+'s' : avgLatMs+'ms'
+
+    let html = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">`
+    // Avg Validation Score card with small gauge
+    const scoreGaugeColor = avgScore >= 80 ? 'text-emerald-400' : avgScore >= 60 ? 'text-amber-400' : 'text-red-400'
+    html += `<div class="bg-slate-900 rounded-xl border border-slate-800 p-4 flex items-center gap-3">
+      <div class="flex-shrink-0">${smallScoreGauge(avgScore)}</div>
+      <div>
+        <div class="text-[11px] text-slate-500 mb-0.5">Avg Validation Score</div>
+        <div class="text-2xl font-bold ${scoreGaugeColor} count-up">${avgScore}</div>
+        <div class="text-[10px] text-slate-500">/ 100</div>
+      </div>
+    </div>`
+    html += metricCard('Success Rate', sr + '%', `${s.total??0} total responses`, srC)
+    html += metricCard('Total Analyses', (s.total??0).toLocaleString(), `${s.invalid??0} invalid · ${s.hallucinations??0} hallucinations`, 'text-indigo-400')
+    html += metricCard('Avg Latency', avgLatFmt, `max ${s.max_latency_ms??0}ms`, avgLatMs > 30000 ? 'text-red-400' : 'text-white')
+    html += `</div>`
+
     // ── Bedrock metrics section ────────────────────────────────────────────
-    let html = `<div class="mb-5">
+    html += `<div class="mb-5">
       <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Amazon Bedrock · Last 24h</div>
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3">`
     html += metricCard('Total Invocations', (bm.total_invocations_24h||0).toLocaleString(), 'model calls', 'text-indigo-400')
@@ -446,14 +677,6 @@ async function loadAI() {
 
     // ── S3-based agent events section ──────────────────────────────────────
     html += `<div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-2">IntelliOps Agent Events (S3 log store)</div>`
-    const sr  = s.success_rate ?? 0
-    const srC = sr >= 80 ? 'text-emerald-400' : sr >= 60 ? 'text-amber-400' : 'text-red-400'
-    html += `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">`
-    html += metricCard('Success Rate', sr + '%', `${s.total??0} total responses`, srC)
-    html += metricCard('Error Rate', (s.error_rate??0) + '%', `${s.invalid??0} invalid`, (s.error_rate||0)>20?'text-red-400':'text-slate-300')
-    html += metricCard('Hallucinations', s.hallucinations??0, `${s.hallucination_rate??0}% rate`, (s.hallucination_rate||0)>5?'text-red-400':'text-emerald-400')
-    html += metricCard('Avg Latency', (s.avg_latency_ms??0) + 'ms', `max ${s.max_latency_ms??0}ms`, (s.avg_latency_ms||0)>30000?'text-red-400':'text-white')
-    html += `</div>`
 
     // Alerts
     for (const al of (d.alerts||[])) {
@@ -491,8 +714,32 @@ async function loadAI() {
       }
       html += `</div>`
     } else {
-      html += `<div class="text-center py-8 text-slate-500 text-sm bg-slate-900/50 rounded-xl border border-slate-800">No S3 agent events yet.<br><span class="text-xs">IntelliOps PoC agents log events to S3 at ai-monitoring/events/</span></div>`
+      html += `<div class="text-center py-8 text-slate-500 text-sm bg-slate-900/50 rounded-xl border border-slate-800 mb-5">No S3 agent events yet.<br><span class="text-xs">IntelliOps PoC agents log events to S3 at ai-monitoring/events/</span></div>`
     }
+
+    // ── Hourly Trend ───────────────────────────────────────────────────────
+    if ((d.hourly_trend||[]).length > 0) {
+      const trend24 = Array.from({length:24}, (_,i) => d.hourly_trend.find(t => t.hour === i) || {hour:i, count:0})
+      html += `<div class="bg-slate-900 rounded-xl border border-slate-800 p-4 mb-5">
+        <div class="text-sm font-semibold text-white mb-3">Hourly Analysis Trend (last 24h)</div>
+        ${hourlyChart(trend24)}
+      </div>`
+    }
+
+    // ── AI Analysis Validation Scores ──────────────────────────────────────
+    html += `<div class="mb-3">
+      <div class="flex items-center justify-between mb-3">
+        <div class="text-sm font-semibold text-white">AI Analysis Validation Scores</div>
+        <span class="text-xs text-slate-500">${jobs.length} records · avg score: <span class="font-bold ${scoreGaugeColor}">${avgScore}</span></span>
+      </div>
+      <div id="ai-jobs-filter" class="flex gap-2 mb-3">
+        <button onclick="filterAIJobs('all')" id="jf-all" class="ai-job-filter-btn text-xs px-3 py-1 rounded-lg bg-indigo-600 text-white font-medium">All</button>
+        <button onclick="filterAIJobs('strands_agent')" id="jf-strands" class="ai-job-filter-btn text-xs px-3 py-1 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 font-medium">Strands Agent</button>
+        <button onclick="filterAIJobs('ollama_executor')" id="jf-ollama" class="ai-job-filter-btn text-xs px-3 py-1 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 font-medium">Ollama</button>
+      </div>
+      <div id="ai-jobs-table">${renderJobsTable(jobs)}</div>
+    </div>`
+
     el.innerHTML = html
   } catch (e) { el.innerHTML = `<div class="text-red-400 text-sm">Error: ${escHtml(e.message)}</div>` }
 }
@@ -535,7 +782,6 @@ async function loadAgents() {
         <span class="text-xs">Ensure bedrock-agent:ListAgents permission is attached to the instance role.</span>
       </div>`
     } else {
-      // Group: prepared first, then warning, then critical
       const order = { healthy:0, warning:1, critical:2, unknown:3 }
       agents.sort((a,b) => (order[a.health]||3) - (order[b.health]||3) || a.agent_name.localeCompare(b.agent_name))
       html += `<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">`
@@ -601,9 +847,10 @@ async function loadUptime() {
     html += `<div class="space-y-3">`
     for (const svc of (d.services||[])) {
       const border = svc.status === 'up' ? 'border-emerald-800/30' : 'border-red-800/50'
+      const dotClass = svc.status === 'up' ? 'dot-healthy pulse-glow' : svc.status === 'warning' ? 'dot-warning' : 'dot-critical'
       html += `<div class="bg-slate-900 rounded-xl border ${border} p-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          ${statusDot(svc.status)}
+          <span class="status-dot ${dotClass} inline-block"></span>
           <div>
             <div class="text-sm font-semibold text-white">${escHtml(svc.name)}</div>
             <div class="text-xs text-slate-500 font-mono">${escHtml(svc.url)}</div>
