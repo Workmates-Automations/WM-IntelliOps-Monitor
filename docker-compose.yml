@@ -11,6 +11,26 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=24h
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ── Ollama model init — pulls qwen2.5:1.5b once on first deploy ───────────────
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: intelliops-ollama-pull
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["ollama", "pull", "qwen2.5:1.5b"]
+    restart: "no"
 
   # ── Monitor API ───────────────────────────────────────────────────────────────
   monitor:
@@ -23,7 +43,7 @@ services:
       - HOME_ACCOUNT_ID=${HOME_ACCOUNT_ID:-036160411876}
       - CROSS_ACCOUNT_ROLE_NAME=${CROSS_ACCOUNT_ROLE_NAME:-CWMSessionRole}
       - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:1.5b}
       - MONITOR_LAMBDAS=${MONITOR_LAMBDAS:-}
       - MONITOR_DYNAMO_TABLES=${MONITOR_DYNAMO_TABLES:-IntelliOps-Tickets,IntelliOps-Alarms,IntelliOps-Sessions}
       - INTELLIOPS_STRANDS_JOBS_BUCKET=${INTELLIOPS_STRANDS_JOBS_BUCKET:-intelliops-websiterca}
@@ -45,7 +65,7 @@ services:
     container_name: intelliops-multiagent
     environment:
       - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:1.5b}
       - MONITOR_URL=http://monitor:8000
       - AWS_REGION=${AWS_REGION:-ap-south-1}
       - HOME_ACCOUNT_ID=${HOME_ACCOUNT_ID:-036160411876}

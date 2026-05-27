@@ -50,7 +50,7 @@ logger = logging.getLogger("Monitor")
 # ── Config ────────────────────────────────────────────────────────────────────
 
 _OLLAMA_URL   = os.environ.get("OLLAMA_URL",   "http://localhost:11434")
-_OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
+_OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:1.5b")
 _HOME_REGION  = os.environ.get("AWS_REGION",   "ap-south-1")
 _HOME_ACCOUNT = os.environ.get("HOME_ACCOUNT_ID", "036160411876")
 _ROLE_NAME    = os.environ.get("CROSS_ACCOUNT_ROLE_NAME", "CWMSessionRole")
